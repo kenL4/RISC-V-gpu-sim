@@ -19,8 +19,8 @@ cmake --build .
 
 To run an example binary on the simulator:
 ```
-cd examples/
-make bin
-cd ../build
-./RISCVGpuSim examples/kernels/example1.o
+cd examples/example1
+make all
+cd ../../build
+./RISCVGpuSim examples/example1/kernel
 ```
