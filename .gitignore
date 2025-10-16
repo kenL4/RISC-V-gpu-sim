@@ -1,0 +1,9 @@
+# Build files
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile
+cmake_install.cmake
+
+# VSCODE
+.vscode/
