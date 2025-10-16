@@ -2,7 +2,7 @@
 This project is a software simulator for a RISC-V GPU model, intended to be used a substrate to test and develop GPU kernels.
 
 ## Dependencies
-We need a RISC-V compiler.
+We need a RISC-V compiler.<br>
 On Ubuntu 24.04, we can do:
 ```sudo apt install gcc-riscv64-unknown-elf```
 
