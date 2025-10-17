@@ -10,5 +10,17 @@ file(GLOB SOURCES src/*.cpp)
 add_library(cxxopts INTERFACE)
 target_include_directories(cxxopts INTERFACE include)
 
+add_library(elfio INTERFACE)
+target_include_directories(elfio INTERFACE include/elfio)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CAPSTONE REQUIRED capstone)
+
+include_directories(${CAPSTONE_INCLUDE_DIRS})
+link_directories(${CAPSTONE_LIBRARY_DIRS})
+
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(RISCVGpuSim PRIVATE cxxopts)
+target_link_libraries(RISCVGpuSim 
+                        PRIVATE cxxopts
+                        PRIVATE elfio
+                        PUBLIC ${CAPSTONE_LIBRARIES})

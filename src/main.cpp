@@ -1,6 +1,6 @@
 #include "cxxopts.hpp"
-#include <iostream>
-#include <fstream>
+#include "utils.hpp"
+#include "parser.hpp"
 
 int main(int argc, char* argv[]) {
     cxxopts::Options options("RISCVGpuSim", "A software simulator for a RISC-V GPU");
@@ -18,6 +18,13 @@ int main(int argc, char* argv[]) {
     }
 
     std::string filename = result["filename"].as<std::string>();
-    std::cout << "Input file: " << filename << std::endl;
-    // TODO: Actually read the file!
+    std::cout << "Loading ELF file... " << std::endl;
+    parse_error parse_error_code = parse_binary(filename);
+    if (parse_error_code != PARSE_SUCCESS) {
+        std::cout << "Failed to load/parse file: " << filename << std::endl;
+        return 1;
+    }
+    std::cout << "Successfully loaded ELF file!" << std::endl;
+
+    return 0;
 }
