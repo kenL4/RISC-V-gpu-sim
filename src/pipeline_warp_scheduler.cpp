@@ -9,8 +9,8 @@
 class WarpScheduler : public PipelineStage {
 public:
     WarpScheduler(int warp_size, int warp_count): warp_size(warp_size), warp_count(warp_count) {
-        log("WARP_SCHEDULER", "Initializing warp scheduling pipeline stage");
-        for (int i = 0; i < warp_size; i++) {
+        log("Warp Scheduler", "Initializing warp scheduling pipeline stage");
+        for (int i = 0; i < warp_count; i++) {
             Warp *warp = new Warp(i, warp_size);
             warp_queue.push(warp);
         }
@@ -26,13 +26,13 @@ public:
 
         // Update pipeline latch
         PipelineStage::output_latch->updated = true;
-        PipelineStage::output_latch->warp_id = top->warp_id;
+        PipelineStage::output_latch->warp = top;
 
-        log("WARP_SCHEDULER", "warp " + std::to_string(top->warp_id));
+        log("Warp Scheduler", "Warp " + std::to_string(top->warp_id) + " scheduled to run");
     }
 
     bool is_active() override {
-        return warp_queue.size() > 0;
+        return warp_queue.size() > 0; // || PipelineStage::input_latch->updated
     }
 
     ~WarpScheduler() {
@@ -41,7 +41,7 @@ public:
             warp_queue.pop();
         }
 
-        log("WARP_SCHEDULER", "Destroyed warp scheduling pipeline stage");
+        log("Warp Scheduler", "Destroyed pipeline stage");
     }
 private:
     int warp_size;

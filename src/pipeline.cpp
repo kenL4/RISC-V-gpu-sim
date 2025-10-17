@@ -56,13 +56,13 @@ public:
     void execute() override {
         if (!PipelineStage::input_latch->updated) return;
         
-        uint64_t warp_id = PipelineStage::input_latch->warp_id;
-        log(name, "warp " + std::to_string(warp_id));
+        uint64_t warp_id = PipelineStage::input_latch->warp->warp_id;
+        log(name, "Warp " + std::to_string(warp_id));
 
         // Update pipeline latches
         PipelineStage::input_latch->updated = false;
         PipelineStage::output_latch->updated = true;
-        PipelineStage::output_latch->warp_id = warp_id;
+        PipelineStage::output_latch->warp = PipelineStage::input_latch->warp;
     };
 
     bool is_active() override {

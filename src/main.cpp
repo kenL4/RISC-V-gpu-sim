@@ -3,13 +3,14 @@
 #include "parser.hpp"
 #include "pipeline.cpp"
 #include "pipeline_warp_scheduler.cpp"
+#include "pipeline_ats.cpp"
 
 Pipeline* initialize_pipeline() {
     Pipeline *p = new Pipeline();
 
     // Construct stages
-    p->add_stage<WarpScheduler>(3, 1);
-    p->add_stage<MockPipelineStage>("Active Thread Selection");
+    p->add_stage<WarpScheduler>(32, 3);
+    p->add_stage<ActiveThreadSelection>();
     p->add_stage<MockPipelineStage>("Instruction Fetch");
     p->add_stage<MockPipelineStage>("Operand Fetch");
     p->add_stage<MockPipelineStage>("Execute/Suspend");
