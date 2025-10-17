@@ -6,9 +6,9 @@ We need a RISC-V compiler, and Capstone.<br>
 On Ubuntu 24.04, we can do:
 ```
 sudo apt install gcc-riscv64-unknown-elf \
-                libcapstone-dev
+                 libcapstone-dev
 ```
-Older versions of Capstone might not support RISC-V so you may have to build from source.<br>
+Older versions of Capstone might not support RISC-V so you may have to build from [source](https://github.com/capstone-engine/capstone.git).<br>
 Statically included dependencies: ```cxxopts, ELFIO```
 
 ## Getting started
