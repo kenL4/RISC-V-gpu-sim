@@ -8,3 +8,7 @@ void debug_log(std::string message) {
     std::cout << "[" << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << "] "
               << message << std::endl;
 }
+
+void log(std::string name, std::string message) {
+    debug_log("[" + name + "] " + message);
+}

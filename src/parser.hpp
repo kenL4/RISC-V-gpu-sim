@@ -7,6 +7,10 @@ enum parse_error {
     PARSE_SUCCESS = 1,
 };
 
+/*
+ * A helper function to parse a RISC-V ELF binary
+ * to an intermediate format for the simulation.
+ */
 parse_error parse_binary(std::string file) {
     ELFIO::elfio reader;
     if (!reader.load(file)) {
@@ -27,10 +31,10 @@ parse_error parse_binary(std::string file) {
     }
     count = cs_disasm(handle, code, code_size, addr, 0, &insn);
 
-    for (size_t i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++) {
         std::cout << std::hex << insn[i].address << ":\t"
-                    << insn[i].mnemonic << "\t"
-                    << insn[i].op_str << std::endl;
+            << insn[i].mnemonic << "\t"
+            << insn[i].op_str << std::endl;
     }
 
     if (count > 0) cs_free(insn, count);
