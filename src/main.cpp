@@ -1,6 +1,7 @@
 #include "cxxopts.hpp"
 #include "utils.hpp"
 #include "parser.hpp"
+#include "pipeline.cpp"
 
 int main(int argc, char* argv[]) {
     cxxopts::Options options("RISCVGpuSim", "A software simulator for a RISC-V GPU");
@@ -26,6 +27,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     debug_log("Successfully loaded ELF file!");
+
+    Pipeline p;
+    p.add_stage(PipelineStage("Warp Scheduling"));
+    p.add_stage(PipelineStage("Active Thread Selection"));
+    p.add_stage(PipelineStage("Instruction Fetch"));
+    p.add_stage(PipelineStage("Operand Fetch"));
+    p.add_stage(PipelineStage("Execute/Suspend"));
+    p.add_stage(PipelineStage("Writeback/Resume"));
+    p.execute();
 
     return 0;
 }
