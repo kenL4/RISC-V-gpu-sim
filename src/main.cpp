@@ -18,13 +18,14 @@ int main(int argc, char* argv[]) {
     }
 
     std::string filename = result["filename"].as<std::string>();
-    std::cout << "Loading ELF file... " << std::endl;
+    
+    debug_log("Loading ELF file...");
     parse_error parse_error_code = parse_binary(filename);
     if (parse_error_code != PARSE_SUCCESS) {
         std::cout << "Failed to load/parse file: " << filename << std::endl;
         return 1;
     }
-    std::cout << "Successfully loaded ELF file!" << std::endl;
+    debug_log("Successfully loaded ELF file!");
 
     return 0;
 }
