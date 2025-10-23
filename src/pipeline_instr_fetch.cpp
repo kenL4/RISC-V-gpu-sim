@@ -26,8 +26,7 @@ public:
         PipelineStage::output_latch->instruction = fetched_instr;
 
         log("Instruction Fetch", "Warp " + std::to_string(warp->warp_id) + 
-            " executing instruction " + fetched_instr->mnemonic + 
-            "\t" + fetched_instr->op_str);
+            " executing instruction " + fetched_instr->mnemonic);
     };
 
     bool is_active() override {

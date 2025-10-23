@@ -14,6 +14,8 @@ parse_error parse_binary(std::string file, parse_output *out) {
     if (cs_open(CS_ARCH_RISCV, CS_MODE_RISCVC, &out->handle) != CS_ERR_OK) {
         return PARSE_LOAD_ERROR;
     }
+    // Ask Capstone to retrieve the individual operands too
+    cs_option(out->handle, CS_OPT_DETAIL, CS_OPT_ON);
     out->count = cs_disasm(out->handle, code, code_size, out->base_addr, 0, &out->insn);
 
     if (out->count > 0) return PARSE_SUCCESS;

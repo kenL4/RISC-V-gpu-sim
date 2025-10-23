@@ -4,16 +4,17 @@
 #include "pipeline_warp_scheduler.cpp"
 #include "pipeline_ats.cpp"
 #include "pipeline_instr_fetch.cpp"
+#include "pipeline_op_fetch.cpp"
 #include "mem_instr.hpp"
 
-Pipeline* initialize_pipeline(InstructionMemory *im) {
+Pipeline* initialize_pipeline(InstructionMemory *im, RegisterFile *rf) {
     Pipeline *p = new Pipeline();
 
     // Construct stages
     p->add_stage<WarpScheduler>(32, 2, im->get_base_addr());
     p->add_stage<ActiveThreadSelection>();
     p->add_stage<InstructionFetch>(im);
-    p->add_stage<MockPipelineStage>("Operand Fetch");
+    p->add_stage<OperandFetch>(rf);
     p->add_stage<MockPipelineStage>("Execute/Suspend");
     p->add_stage<MockPipelineStage>("Writeback/Resume");
 
@@ -64,8 +65,12 @@ int main(int argc, char* argv[]) {
 
     InstructionMemory tcim(&out);
     debug_log("Instruction memory has base_addr " + std::to_string(tcim.get_base_addr()));
+    
+    size_t register_count = 32;
+    RegisterFile rf(register_count);
+    debug_log("Register file instantiated with " + std::to_string(register_count) + " registers");
 
-    Pipeline *p = initialize_pipeline(&tcim);
+    Pipeline *p = initialize_pipeline(&tcim, &rf);
     while (p->has_active_stages()) {
         p->execute();
     }
