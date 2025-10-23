@@ -11,13 +11,13 @@ public:
     size_t size;
     std::vector<uint64_t> pc;
     std::vector<uint64_t> nesting_level;
-    Warp(uint64_t warp_id, size_t size): warp_id(warp_id), size(size) {
+    Warp(uint64_t warp_id, size_t size, uint64_t start_pc): warp_id(warp_id), size(size) {
         pc.reserve(size);
         nesting_level.reserve(size);
         
         // Clear the vectors
         for (int i = 0; i < size; i++) {
-            pc[i] = 0;
+            pc[i] = start_pc;
             nesting_level[i] = 0;
         }
     };
@@ -27,14 +27,15 @@ public:
 /*
  * A latch between each pipeline stage that defines
  * the input/output interface between stages
- * TODO: Refactor the latch to be an interface so that we
- * can vary it between stages
+ * TODO: Refactor the latch so that we
+ * can vary it between stages (union/interface)
  */
 class PipelineLatch {
 public:
     bool updated;
     Warp* warp;
     std::vector<uint64_t> active_threads;
+    cs_insn* instruction;
 };
 
 /*

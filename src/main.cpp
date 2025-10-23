@@ -1,17 +1,18 @@
 #include "cxxopts.hpp"
 #include "utils.hpp"
-#include "parser.hpp"
 #include "pipeline.cpp"
 #include "pipeline_warp_scheduler.cpp"
 #include "pipeline_ats.cpp"
+#include "pipeline_instr_fetch.cpp"
+#include "mem_instr.hpp"
 
-Pipeline* initialize_pipeline() {
+Pipeline* initialize_pipeline(InstructionMemory *im) {
     Pipeline *p = new Pipeline();
 
     // Construct stages
-    p->add_stage<WarpScheduler>(32, 3);
+    p->add_stage<WarpScheduler>(32, 2, im->get_base_addr());
     p->add_stage<ActiveThreadSelection>();
-    p->add_stage<MockPipelineStage>("Instruction Fetch");
+    p->add_stage<InstructionFetch>(im);
     p->add_stage<MockPipelineStage>("Operand Fetch");
     p->add_stage<MockPipelineStage>("Execute/Suspend");
     p->add_stage<MockPipelineStage>("Writeback/Resume");
@@ -37,6 +38,7 @@ int main(int argc, char* argv[]) {
 
     options.add_options()
         ("filename", "Input filename", cxxopts::value<std::string>())
+        ("d, debug", "Turn on debugging logs");
         ("h,help", "Show help");
     options.parse_positional({"filename"});
     options.positional_help("<Input File>");
@@ -47,21 +49,30 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    Config::instance().setDebug(result.count("debug") > 0);
+
     std::string filename = result["filename"].as<std::string>();
     
     debug_log("Loading ELF file...");
-    parse_error parse_error_code = parse_binary(filename);
-    if (parse_error_code != PARSE_SUCCESS) {
+    parse_output out;
+    parse_error parse_err = parse_binary(filename, &out);
+    if (parse_err != PARSE_SUCCESS) {
         std::cout << "Failed to load/parse file: " << filename << std::endl;
         return 1;
     }
     debug_log("Successfully loaded ELF file!");
 
-    Pipeline *p = initialize_pipeline();
+    InstructionMemory tcim(&out);
+    debug_log("Instruction memory has base_addr " + std::to_string(tcim.get_base_addr()));
+
+    Pipeline *p = initialize_pipeline(&tcim);
     while (p->has_active_stages()) {
         p->execute();
     }
     delete p;
 
+    // Make sure to clean up the capstone instructions
+    if (out.count > 0) cs_free(out.insn, out.count);
+    cs_close(&out.handle);
     return 0;
 }

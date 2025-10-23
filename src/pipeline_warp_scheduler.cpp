@@ -8,15 +8,19 @@
  */
 class WarpScheduler : public PipelineStage {
 public:
-    WarpScheduler(int warp_size, int warp_count): warp_size(warp_size), warp_count(warp_count) {
+    WarpScheduler(int warp_size, int warp_count, uint64_t start_pc): warp_size(warp_size), warp_count(warp_count) {
         log("Warp Scheduler", "Initializing warp scheduling pipeline stage");
         for (int i = 0; i < warp_count; i++) {
-            Warp *warp = new Warp(i, warp_size);
+            Warp *warp = new Warp(i, warp_size, start_pc);
             warp_queue.push(warp);
         }
     }
 
     void execute() override {
+        // if (PipelineStage::input_latch->updated) {
+        //     warp_queue.push(PipelineStage::input_latch->warp);
+        //     PipelineStage::input_latch->updated = false;
+        // }
         if (warp_queue.empty()) {
             return;
         }
@@ -32,7 +36,7 @@ public:
     }
 
     bool is_active() override {
-        return warp_queue.size() > 0; // || PipelineStage::input_latch->updated
+        return warp_queue.size() > 0; // || PipelineStage::input_latch->updated;
     }
 
     ~WarpScheduler() {

@@ -2,7 +2,7 @@
 #include "pipeline.hpp"
 
 /*
- * This unit finds the threads in a warp with
+ * The Active Thread Selection unit finds the threads in a warp with
  * the deepest nesting level and the same PC and 
  */
 class ActiveThreadSelection : public PipelineStage {
@@ -13,7 +13,6 @@ public:
 
     /*
      * Computes the vector of active threads based on nesting level
-     * TODO: handle checking for common PC
      */
     void execute() override {
         if (!PipelineStage::input_latch->updated) {
@@ -21,14 +20,20 @@ public:
         }
 
         Warp *warp = PipelineStage::input_latch->warp;
-        uint64_t max_nesting = 0;
+        uint64_t max_nesting = warp->nesting_level[0];
+        uint64_t warp_pc = warp->pc[0];
         for (int i = 0; i < warp->size; i++) {
-            max_nesting = std::max(max_nesting, warp->nesting_level[i]);
+            if (warp->nesting_level[i] > max_nesting) {
+                max_nesting = warp->nesting_level[i];
+                warp_pc = warp->pc[i];
+            }
         }
-
+        
         std::vector<uint64_t> active_threads;
         for (int i = 0; i < warp->size; i++) {
-            if (max_nesting == warp->nesting_level[i]) {
+            bool same_nesting = max_nesting == warp->nesting_level[i];
+            bool same_pc = warp_pc == warp->pc[i];
+            if (same_nesting && same_pc) {
                 active_threads.emplace_back(i);
             }
         }
