@@ -14,7 +14,7 @@ Pipeline* initialize_pipeline(InstructionMemory *im, RegisterFile *rf) {
     p->add_stage<WarpScheduler>(32, 2, im->get_base_addr());
     p->add_stage<ActiveThreadSelection>();
     p->add_stage<InstructionFetch>(im);
-    p->add_stage<OperandFetch>(rf);
+    p->add_stage<OperandFetch>();
     p->add_stage<MockPipelineStage>("Execute/Suspend");
     p->add_stage<MockPipelineStage>("Writeback/Resume");
 
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 
     InstructionMemory tcim(&out);
     debug_log("Instruction memory has base_addr " + std::to_string(tcim.get_base_addr()));
-    
+
     size_t register_count = 32;
     RegisterFile rf(register_count);
     debug_log("Register file instantiated with " + std::to_string(register_count) + " registers");

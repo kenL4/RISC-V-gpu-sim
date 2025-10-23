@@ -11,7 +11,7 @@
  */
 class OperandFetch: public PipelineStage {
 public:
-    OperandFetch(RegisterFile *rf): rf(rf) {
+    OperandFetch() {
         log("Operand Fetch", "Initializing operand fetch pipeline stage");
     }
     void execute() override {
@@ -34,6 +34,4 @@ public:
     }
 
     ~OperandFetch() {};
-private:
-    RegisterFile *rf;
 };
