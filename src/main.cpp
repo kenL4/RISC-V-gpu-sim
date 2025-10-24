@@ -1,22 +1,33 @@
 #include "cxxopts.hpp"
 #include "utils.hpp"
 #include "pipeline.cpp"
-#include "pipeline_warp_scheduler.cpp"
+#include "pipeline_warp_scheduler.hpp"
 #include "pipeline_ats.cpp"
 #include "pipeline_instr_fetch.cpp"
 #include "pipeline_op_fetch.cpp"
+#include "pipeline_execute.cpp"
+#include "pipeline_writeback.cpp"
 #include "mem_instr.hpp"
+
+#define NUM_LANES 32
+#define NUM_WARPS 1
 
 Pipeline* initialize_pipeline(InstructionMemory *im, RegisterFile *rf) {
     Pipeline *p = new Pipeline();
 
     // Construct stages
-    p->add_stage<WarpScheduler>(32, 2, im->get_base_addr());
+    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr());
     p->add_stage<ActiveThreadSelection>();
     p->add_stage<InstructionFetch>(im);
     p->add_stage<OperandFetch>();
-    p->add_stage<MockPipelineStage>("Execute/Suspend");
-    p->add_stage<MockPipelineStage>("Writeback/Resume");
+    p->add_stage<ExecuteSuspend>(rf, im->get_max_addr());
+    p->add_stage<WritebackResume>(rf);
+
+    std::shared_ptr<WarpScheduler> warp_scheduler_stage = std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
+    std::shared_ptr<ExecuteSuspend> execute_stage = std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
+    execute_stage->insert_warp = [ws = warp_scheduler_stage] (Warp *warp) {
+        ws->insert_warp(warp);
+    };
 
     // Initialize latches
     PipelineLatch *latches[6];
@@ -39,7 +50,8 @@ int main(int argc, char* argv[]) {
 
     options.add_options()
         ("filename", "Input filename", cxxopts::value<std::string>())
-        ("d, debug", "Turn on debugging logs");
+        ("d,debug", "Turn on debugging logs")
+        ("r,regdump", "Dump the register values after each writeback stage")
         ("h,help", "Show help");
     options.parse_positional({"filename"});
     options.positional_help("<Input File>");
@@ -51,6 +63,7 @@ int main(int argc, char* argv[]) {
     }
 
     Config::instance().setDebug(result.count("debug") > 0);
+    Config::instance().setRegisterDump(result.count("regdump") > 0);
 
     std::string filename = result["filename"].as<std::string>();
     
@@ -67,7 +80,7 @@ int main(int argc, char* argv[]) {
     debug_log("Instruction memory has base_addr " + std::to_string(tcim.get_base_addr()));
 
     size_t register_count = 32;
-    RegisterFile rf(register_count);
+    RegisterFile rf(register_count, NUM_LANES);
     debug_log("Register file instantiated with " + std::to_string(register_count) + " registers");
 
     Pipeline *p = initialize_pipeline(&tcim, &rf);

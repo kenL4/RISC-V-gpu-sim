@@ -11,7 +11,8 @@ parse_error parse_binary(std::string file, parse_output *out) {
     size_t code_size = text_section->get_size();
     out->base_addr = text_section->get_address();
 
-    if (cs_open(CS_ARCH_RISCV, CS_MODE_RISCVC, &out->handle) != CS_ERR_OK) {
+    printf("Capstone version: %u.%u\n", CS_API_MAJOR, CS_API_MINOR);
+    if (cs_open(CS_ARCH_RISCV, CS_MODE_RISCV64, &out->handle) != CS_ERR_OK) {
         return PARSE_LOAD_ERROR;
     }
     // Ask Capstone to retrieve the individual operands too
