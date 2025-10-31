@@ -1,39 +1,27 @@
-#include "utils.hpp"
-#include "pipeline.hpp"
-#include "mem_instr.hpp"
+#include "pipeline_instr_fetch.hpp"
 
-/*
- * The Instruction Fetch unit looks up the instruction
- * associated with the active threads.
- */
-class InstructionFetch: public PipelineStage {
-public:
-    InstructionFetch(InstructionMemory *im): im(im) {
-        log("Instruction Fetch", "Initializing instruction fetch pipeline stage");
-    }
-    void execute() override {
-        if (!PipelineStage::input_latch->updated) return;
-        
-        Warp *warp = PipelineStage::input_latch->warp;
-        uint64_t thread_id = PipelineStage::input_latch->active_threads[0];
-        uint64_t warp_pc = warp->pc[thread_id];
-        cs_insn *fetched_instr = im->get_instruction(warp_pc);
+InstructionFetch::InstructionFetch(InstructionMemory *im): im(im) {
+    log("Instruction Fetch", "Initializing instruction fetch pipeline stage");
+}
 
-        PipelineStage::input_latch->updated = false;
-        PipelineStage::output_latch->updated = true;
-        PipelineStage::output_latch->warp = warp;
-        PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
-        PipelineStage::output_latch->instruction = fetched_instr;
+void InstructionFetch::execute() {
+    if (!PipelineStage::input_latch->updated) return;
+    
+    Warp *warp = PipelineStage::input_latch->warp;
+    uint64_t thread_id = PipelineStage::input_latch->active_threads[0];
+    uint64_t warp_pc = warp->pc[thread_id];
+    cs_insn *fetched_instr = im->get_instruction(warp_pc);
 
-        log("Instruction Fetch", "Warp " + std::to_string(warp->warp_id) + 
-            " will execute instruction " + fetched_instr->mnemonic);
-    };
+    PipelineStage::input_latch->updated = false;
+    PipelineStage::output_latch->updated = true;
+    PipelineStage::output_latch->warp = warp;
+    PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
+    PipelineStage::output_latch->instruction = fetched_instr;
 
-    bool is_active() override {
-        return PipelineStage::input_latch->updated;
-    }
-
-    ~InstructionFetch() {};
-private:
-    InstructionMemory *im;
+    log("Instruction Fetch", "Warp " + std::to_string(warp->warp_id) + 
+        " will execute instruction " + fetched_instr->mnemonic);
 };
+
+bool InstructionFetch::is_active() {
+    return PipelineStage::input_latch->updated;
+}

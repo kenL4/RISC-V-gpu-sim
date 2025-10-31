@@ -57,3 +57,51 @@ protected:
     PipelineLatch *input_latch;
     PipelineLatch *output_latch;
 };
+
+#include "pipeline.hpp"
+
+/*
+ * The Pipeline class represents a series of computation stages
+ * that each warp will pass through.
+ */
+class Pipeline {
+public:
+    /*
+     * Insert a stage in our polymorphic stage container
+     */
+    template <typename T, typename... Args>
+    void add_stage(Args... args) {
+        stages.emplace_back(std::make_shared<T>(args...));
+    }
+
+    /*
+     * Execute one cycle of the pipeline
+     */
+    void execute();
+
+    /*
+     * Returns true if any of the associated pipeline stages
+     * are still active
+     */
+    bool has_active_stages();
+
+    /*
+     * Returns the pipeline stage with index "index"
+     */
+    std::shared_ptr<PipelineStage> get_stage(int index);
+
+private:
+    std::vector<std::shared_ptr<PipelineStage>> stages;
+};
+
+/*
+ * A dummy implementation of a pipeline stage
+ */
+class MockPipelineStage: public PipelineStage {
+public:
+    std::string name;
+    MockPipelineStage(std::string name): name(name) {};
+    void execute() override;
+    bool is_active() override;
+    ~MockPipelineStage() {};
+};

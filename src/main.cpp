@@ -1,12 +1,12 @@
 #include "cxxopts.hpp"
 #include "utils.hpp"
-#include "pipeline.cpp"
+#include "pipeline.hpp"
 #include "pipeline_warp_scheduler.hpp"
-#include "pipeline_ats.cpp"
-#include "pipeline_instr_fetch.cpp"
-#include "pipeline_op_fetch.cpp"
-#include "pipeline_execute.cpp"
-#include "pipeline_writeback.cpp"
+#include "pipeline_ats.hpp"
+#include "pipeline_instr_fetch.hpp"
+#include "pipeline_op_fetch.hpp"
+#include "pipeline_execute.hpp"
+#include "pipeline_writeback.hpp"
 #include "mem_instr.hpp"
 
 #define NUM_LANES 32
