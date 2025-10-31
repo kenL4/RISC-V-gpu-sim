@@ -9,3 +9,5 @@ _start:
     xor t0, t0, t2
     xor t2, t0, t2
     neg t0, t0
+    srli t0, t0, 1
+    sll t0, t0, t2
