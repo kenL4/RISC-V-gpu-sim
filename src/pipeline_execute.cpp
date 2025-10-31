@@ -19,22 +19,57 @@ public:
     execute_result execute(Warp *warp, std::vector<size_t> active_threads, cs_insn *insn) {
         std::string mnemonic = insn->mnemonic;
         cs_riscv *riscv = &(insn->detail->riscv);
-        execute_result res { false, false };
+        execute_result res { true, false };
 
         if (mnemonic == "addi") {
-            res.success = true;
             res.write_required = addi(warp, active_threads, riscv);
-        }
-
-        // Default to skip instruction
-        // Bit of a hard-coded way to get next instruction
-        for (auto thread : active_threads) {
-            warp->pc[thread] += 4;
+        } else if (mnemonic == "add") {
+            res.write_required = add(warp, active_threads, riscv);
+        } else if (mnemonic == "neg") {
+            res.write_required = neg(warp, active_threads, riscv);
+        } else if (mnemonic == "sub") {
+            res.write_required = sub(warp, active_threads, riscv);
+        } else if (mnemonic == "sub") {
+            res.write_required = sub(warp, active_threads, riscv);
+        } else if (mnemonic == "and") {
+            // Name followed by an underscore as and is a reserved keyword
+            res.write_required = and_(warp, active_threads, riscv);
+        } else if (mnemonic == "andi") {
+            res.write_required = andi(warp, active_threads, riscv);
+        } else if (mnemonic == "not") {
+            res.write_required = not_(warp, active_threads, riscv);
+        } else if (mnemonic == "or") {
+            res.write_required = or_(warp, active_threads, riscv);
+        } else if (mnemonic == "ori") {
+            res.write_required = ori(warp, active_threads, riscv);
+        } else if (mnemonic == "xor") {
+            res.write_required = xor_(warp, active_threads, riscv);
+        } else if (mnemonic == "xori") {
+            res.write_required = xori(warp, active_threads, riscv);
+        } else {
+            // Default to skip instruction
+            // Bit of a hard-coded way to get next instruction
+            for (auto thread : active_threads) {
+                warp->pc[thread] += 4;
+            }
+            res.success = false;
         }
         return res;
     }
 private:
     RegisterFile *rf;
+    bool add(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[2].reg);
+            rf->set_register(warp->warp_id, thread, rd, rs1 + rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
     bool addi(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
         assert(riscv->op_count == 3);
         for (auto thread : active_threads) {
@@ -42,6 +77,112 @@ private:
             int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
             int64_t imm = riscv->operands[2].imm;
             rf->set_register(warp->warp_id, thread, rd, rs1 + imm);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool neg(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 2);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            rf->set_register(warp->warp_id, thread, rd, -rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool sub(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[2].reg);
+            rf->set_register(warp->warp_id, thread, rd, rs1 - rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool and_(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[2].reg);
+            rf->set_register(warp->warp_id, thread, rd, rs1 & rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool andi(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int64_t imm = riscv->operands[2].imm;
+            rf->set_register(warp->warp_id, thread, rd, rs1 & imm);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool not_(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            rf->set_register(warp->warp_id, thread, rd, ~rs1);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool or_(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[2].reg);
+            rf->set_register(warp->warp_id, thread, rd, rs1 | rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool ori(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int64_t imm = riscv->operands[2].imm;
+            rf->set_register(warp->warp_id, thread, rd, rs1 | imm);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool xor_(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[2].reg);
+            rf->set_register(warp->warp_id, thread, rd, rs1 ^ rs2);
+
+            warp->pc[thread] += 4;
+        }
+        return active_threads.size() > 0;
+    }
+    bool xori(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+        assert(riscv->op_count == 3);
+        for (auto thread : active_threads) {
+            unsigned int rd = riscv->operands[0].reg;
+            int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+            int64_t imm = riscv->operands[2].imm;
+            rf->set_register(warp->warp_id, thread, rd, rs1 ^ imm);
 
             warp->pc[thread] += 4;
         }

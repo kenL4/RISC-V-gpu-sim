@@ -46,7 +46,7 @@ void RegisterFile::pretty_print(uint64_t warp_id) {
     size_t thread_count = regs.empty() ? 0 : regs[0].size();
 
     // Print header: Thread IDs
-    std::cout << std::setw(4) << "Reg";
+    std::cout << std::setw(4) << "Thread";
     for (size_t t = 0; t < thread_count; ++t) {
         std::cout << std::setw(4) << t;
     }
