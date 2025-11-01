@@ -2,17 +2,24 @@
 #include "pipeline.hpp"
 #include "pipeline_warp_scheduler.hpp"
 #include "register_file.hpp"
+#include "mem_coalesce.hpp"
 
 typedef struct execute_result {
     bool success;
     bool write_required;
 } execute_result;
 
+/*
+ * The Execution Unit is the unit that handles the actual
+ * computation and production of side-effects of instructions
+ * in the pipeline.
+ */
 class ExecutionUnit {
 public:
-    ExecutionUnit(RegisterFile *rf);
+    ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf);
     execute_result execute(Warp *warp, std::vector<size_t> active_threads, cs_insn *insn);
 private:
+    CoalescingUnit *cu;
     RegisterFile *rf;
     bool add(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool addi(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
@@ -31,6 +38,10 @@ private:
     bool srli(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool sra(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool srai(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool li(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lui(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool auipc(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
 };
 
 /*
@@ -44,11 +55,12 @@ private:
 class ExecuteSuspend: public PipelineStage {
 public:
     std::function<void(Warp *warp)> insert_warp;
-    ExecuteSuspend(RegisterFile *rf, uint64_t max_addr);
+    ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr);
     void execute() override;
     bool is_active() override;
     ~ExecuteSuspend();
 private:
+    CoalescingUnit *cu;
     ExecutionUnit *eu;
     uint64_t max_addr;
 };

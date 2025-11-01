@@ -1,11 +1,10 @@
 #include "pipeline_execute.hpp"
 
-/*
- * The Execution Unit is the unit that handles the actual
- * computation and production of side-effects of instructions
- * in the pipeline.
- */
-ExecutionUnit::ExecutionUnit(RegisterFile *rf): rf(rf) {}
+// Assuming RISC-V with 64 bit registers
+#define WORD_SIZE 8
+
+ExecutionUnit::ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf): cu(cu), rf(rf) {}
+
 execute_result ExecutionUnit::execute(Warp *warp, std::vector<size_t> active_threads, cs_insn *insn) {
     std::string mnemonic = insn->mnemonic;
     cs_riscv *riscv = &(insn->detail->riscv);
@@ -48,6 +47,28 @@ execute_result ExecutionUnit::execute(Warp *warp, std::vector<size_t> active_thr
         res.write_required = sra(warp, active_threads, riscv);
     } else if (mnemonic == "srai") {
         res.write_required = srai(warp, active_threads, riscv);
+    } else if (mnemonic == "li") {
+        res.write_required = li(warp, active_threads, riscv);
+    } else if (mnemonic == "lui") {
+        res.write_required = lui(warp, active_threads, riscv);
+    } else if (mnemonic == "auipc") {
+        res.write_required = auipc(warp, active_threads, riscv);
+    } else if (mnemonic == "lw") {
+        res.write_required = lw(warp, active_threads, riscv);
+    // } else if (mnemonic == "lh") {
+    //     res.write_required = lh(warp, active_threads, riscv);
+    // } else if (mnemonic == "lhu") {
+    //     res.write_required = lhu(warp, active_threads, riscv);
+    // } else if (mnemonic == "lb") {
+    //     res.write_required = lb(warp, active_threads, riscv);
+    // } else if (mnemonic == "la") {
+    //     res.write_required = la(warp, active_threads, riscv);
+    // } else if (mnemonic == "sw") {
+    //     res.write_required = sw(warp, active_threads, riscv);
+    // } else if (mnemonic == "sh") {
+    //     res.write_required = sh(warp, active_threads, riscv);
+    // } else if (mnemonic == "sb") {
+    //     res.write_required = sb(warp, active_threads, riscv);
     } else {
         // Default to skip instruction
         // Bit of a hard-coded way to get next instruction
@@ -131,7 +152,7 @@ bool ExecutionUnit::andi(Warp *warp, std::vector<size_t> active_threads, cs_risc
     return active_threads.size() > 0;
 }
 bool ExecutionUnit::not_(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
-    assert(riscv->op_count == 3);
+    assert(riscv->op_count == 2);
     for (auto thread : active_threads) {
         unsigned int rd = riscv->operands[0].reg;
         int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
@@ -261,9 +282,62 @@ bool ExecutionUnit::srai(Warp *warp, std::vector<size_t> active_threads, cs_risc
     }
     return active_threads.size() > 0;
 }
+bool ExecutionUnit::li(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        int64_t imm = riscv->operands[1].imm;
+        rf->set_register(warp->warp_id, thread, rd, imm);
 
-ExecuteSuspend::ExecuteSuspend(RegisterFile *rf, uint64_t max_addr): max_addr(max_addr) {
-    eu = new ExecutionUnit(rf);
+        warp->pc[thread] += 4;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::lui(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        int64_t imm = riscv->operands[1].imm;
+        rf->set_register(warp->warp_id, thread, rd, static_cast<uint64_t>(imm) << 12);
+
+        warp->pc[thread] += 4;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::auipc(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        int64_t imm = riscv->operands[1].imm;
+        rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + (static_cast<uint64_t>(imm) << 12));
+
+        warp->pc[thread] += 4;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        int res = cu->load(warp, rs1 + mem.disp, WORD_SIZE);
+        
+        // Eventhough we update the register values here
+        // The warp will be suspended so the updates won't be visible
+        // till after it resumes
+        rf->set_register(warp->warp_id, thread, rd, res);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+
+ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr): 
+    max_addr(max_addr), cu(cu) {
+    eu = new ExecutionUnit(cu, rf);
     log("Execute/Suspend", "Initializing execute/suspend pipeline stage");
 }
 

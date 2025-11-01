@@ -8,11 +8,13 @@
 #include "pipeline_execute.hpp"
 #include "pipeline_writeback.hpp"
 #include "mem_instr.hpp"
+#include "mem_data.hpp"
+#include "mem_coalesce.hpp"
 
 #define NUM_LANES 32
 #define NUM_WARPS 1
 
-Pipeline* initialize_pipeline(InstructionMemory *im, RegisterFile *rf) {
+Pipeline* initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu, RegisterFile *rf) {
     Pipeline *p = new Pipeline();
 
     // Construct stages
@@ -20,8 +22,8 @@ Pipeline* initialize_pipeline(InstructionMemory *im, RegisterFile *rf) {
     p->add_stage<ActiveThreadSelection>();
     p->add_stage<InstructionFetch>(im);
     p->add_stage<OperandFetch>();
-    p->add_stage<ExecuteSuspend>(rf, im->get_max_addr());
-    p->add_stage<WritebackResume>(rf);
+    p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr());
+    p->add_stage<WritebackResume>(cu, rf);
 
     std::shared_ptr<WarpScheduler> warp_scheduler_stage = std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
     std::shared_ptr<ExecuteSuspend> execute_stage = std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
@@ -79,11 +81,16 @@ int main(int argc, char* argv[]) {
     InstructionMemory tcim(&out);
     debug_log("Instruction memory has base_addr " + std::to_string(tcim.get_base_addr()));
 
+    DataMemory scratchpad_mem;
+    debug_log("Instantiated memory scratchpad for the SM");
+    CoalescingUnit cu(&scratchpad_mem);
+    debug_log("Instantiated memory coalescing unit");
+
     size_t register_count = 32;
     RegisterFile rf(register_count, NUM_LANES);
     debug_log("Register file instantiated with " + std::to_string(register_count) + " registers");
 
-    Pipeline *p = initialize_pipeline(&tcim, &rf);
+    Pipeline *p = initialize_pipeline(&tcim, &cu, &rf);
     while (p->has_active_stages()) {
         p->execute();
     }

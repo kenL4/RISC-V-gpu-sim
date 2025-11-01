@@ -9,16 +9,20 @@ WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc): 
 }
 
 void WarpScheduler::execute() {
-    // if (PipelineStage::input_latch->updated) {
-    //     warp_queue.push(PipelineStage::input_latch->warp);
-    //     PipelineStage::input_latch->updated = false;
-    // }
     if (warp_queue.empty()) {
         return;
     }
 
     Warp *top = warp_queue.front();
     warp_queue.pop();
+
+    // Find the first live warp
+    while (top->suspended) {
+        warp_queue.push(top);
+
+        top = warp_queue.front();
+        warp_queue.pop();
+    }
 
     // Update pipeline latch
     PipelineStage::output_latch->updated = true;

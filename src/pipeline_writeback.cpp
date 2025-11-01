@@ -1,14 +1,23 @@
 #include "pipeline_writeback.hpp"
 
-WritebackResume::WritebackResume(RegisterFile *rf): rf(rf) {
+WritebackResume::WritebackResume(CoalescingUnit *cu, RegisterFile *rf): cu(cu), rf(rf) {
     log("Writeback/Resume", "Initializing Writeback/Resume pipeline stage");
 }
 
 void WritebackResume::execute() {
-    // TODO: Check memory responses to unsuspend threads
-    if (!PipelineStage::input_latch->updated) return;
-    
+    cu->tick();
+
+    // Take the thread from execute unless not busy then
+    // resume from suspended
     Warp *warp = PipelineStage::input_latch->warp;
+    if (!PipelineStage::input_latch->updated) {
+        warp = cu->get_resumable_warp();
+        if (warp == nullptr) return;
+    }
+
+    // Wrong when resuming but not a problem as this output latch's values are
+    // ignored by the warp scheduler
+    // In the future, we might have to pipe the true instruction values through
     cs_insn *inst = PipelineStage::input_latch->instruction;
 
     PipelineStage::input_latch->updated = false;
@@ -23,5 +32,5 @@ void WritebackResume::execute() {
 };
 
 bool WritebackResume::is_active() {
-    return PipelineStage::input_latch->updated;
+    return PipelineStage::input_latch->updated || cu->is_busy();
 }

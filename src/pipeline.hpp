@@ -11,7 +11,10 @@ public:
     size_t size;
     std::vector<uint64_t> pc;
     std::vector<uint64_t> nesting_level;
+    bool suspended;
     Warp(uint64_t warp_id, size_t size, uint64_t start_pc): warp_id(warp_id), size(size) {
+        suspended = false;
+        
         pc.reserve(size);
         nesting_level.reserve(size);
         
