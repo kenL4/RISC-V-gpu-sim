@@ -13,6 +13,8 @@ void WritebackResume::execute() {
     if (!PipelineStage::input_latch->updated) {
         warp = cu->get_resumable_warp();
         if (warp == nullptr) return;
+        // Resume the warp
+        warp->suspended = false;
     }
 
     // Wrong when resuming but not a problem as this output latch's values are

@@ -42,6 +42,14 @@ private:
     bool lui(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool auipc(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool lw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lh(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lhu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lb(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool lbu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool la(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool sw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool sh(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool sb(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
 };
 
 /*

@@ -8,6 +8,7 @@ void Pipeline::execute() {
 }
 
 bool Pipeline::has_active_stages() {
+    int i = 0;
     for (auto &stage: stages) {
         if (stage->is_active()) return true;
     }

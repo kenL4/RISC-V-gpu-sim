@@ -1,7 +1,7 @@
 #include "pipeline_execute.hpp"
 
-// Assuming RISC-V with 64 bit registers
-#define WORD_SIZE 8
+// In RISC-V, Word is always 32-bit (4 bytes)
+#define WORD_SIZE 4
 
 ExecutionUnit::ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf): cu(cu), rf(rf) {}
 
@@ -55,20 +55,20 @@ execute_result ExecutionUnit::execute(Warp *warp, std::vector<size_t> active_thr
         res.write_required = auipc(warp, active_threads, riscv);
     } else if (mnemonic == "lw") {
         res.write_required = lw(warp, active_threads, riscv);
-    // } else if (mnemonic == "lh") {
-    //     res.write_required = lh(warp, active_threads, riscv);
-    // } else if (mnemonic == "lhu") {
-    //     res.write_required = lhu(warp, active_threads, riscv);
-    // } else if (mnemonic == "lb") {
-    //     res.write_required = lb(warp, active_threads, riscv);
-    // } else if (mnemonic == "la") {
-    //     res.write_required = la(warp, active_threads, riscv);
-    // } else if (mnemonic == "sw") {
-    //     res.write_required = sw(warp, active_threads, riscv);
-    // } else if (mnemonic == "sh") {
-    //     res.write_required = sh(warp, active_threads, riscv);
-    // } else if (mnemonic == "sb") {
-    //     res.write_required = sb(warp, active_threads, riscv);
+    } else if (mnemonic == "lh") {
+        res.write_required = lh(warp, active_threads, riscv);
+    } else if (mnemonic == "lhu") {
+        res.write_required = lhu(warp, active_threads, riscv);
+    } else if (mnemonic == "lb") {
+        res.write_required = lb(warp, active_threads, riscv);
+    } else if (mnemonic == "la") {
+        res.write_required = la(warp, active_threads, riscv);
+    } else if (mnemonic == "sw") {
+        res.write_required = sw(warp, active_threads, riscv);
+    } else if (mnemonic == "sh") {
+        res.write_required = sh(warp, active_threads, riscv);
+    } else if (mnemonic == "sb") {
+        res.write_required = sb(warp, active_threads, riscv);
     } else {
         // Default to skip instruction
         // Bit of a hard-coded way to get next instruction
@@ -334,6 +334,143 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads, cs_riscv 
     // the warp was never actually suspended
     return !warp->suspended;
 }
+bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        int res = cu->load(warp, rs1 + mem.disp, WORD_SIZE / 2);
+        
+        // Eventhough we update the register values here
+        // The warp will be suspended so the updates won't be visible
+        // till after it resumes
+        rf->set_register(warp->warp_id, thread, rd, res);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        int res = uint64_t(cu->load(warp, rs1 + mem.disp, WORD_SIZE / 2));
+        
+        // Eventhough we update the register values here
+        // The warp will be suspended so the updates won't be visible
+        // till after it resumes
+        rf->set_register(warp->warp_id, thread, rd, res);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        int res = cu->load(warp, rs1 + mem.disp, 1);
+        
+        // Eventhough we update the register values here
+        // The warp will be suspended so the updates won't be visible
+        // till after it resumes
+        rf->set_register(warp->warp_id, thread, rd, res);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        int res = uint64_t(cu->load(warp, rs1 + mem.disp, 1));
+        
+        // Eventhough we update the register values here
+        // The warp will be suspended so the updates won't be visible
+        // till after it resumes
+        rf->set_register(warp->warp_id, thread, rd, res);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::la(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        unsigned int rd = riscv->operands[0].reg;
+        int64_t addr = riscv->operands[1].imm;
+        
+        // This instruction isn't a load in the usual sense
+        // so just continue
+        rf->set_register(warp->warp_id, thread, rd, addr);
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        cu->store(warp, rs1 + mem.disp, WORD_SIZE, rs2);
+        
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        cu->store(warp, rs1 + mem.disp, WORD_SIZE / 2, rs2);
+        
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
+bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        riscv_op_mem mem = riscv->operands[1].mem;
+        int rs1 = rf->get_register(warp->warp_id, thread, mem.base);
+        cu->store(warp, rs1 + mem.disp, 1, rs2);
+        
+        warp->pc[thread] += 4;
+    }
+    // After a load instruction, you don't need to writeback unless
+    // the warp was never actually suspended
+    return !warp->suspended;
+}
 
 ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr): 
     max_addr(max_addr), cu(cu) {
@@ -370,7 +507,8 @@ void ExecuteSuspend::execute() {
         return;
     }
     
-    log("Execute/Suspend", "Warp " + std::to_string(warp->warp_id) + " executed " + insn->mnemonic + "\t" + insn->op_str);
+    log("Execute/Suspend", "Warp " + std::to_string(warp->warp_id) + " executed " + 
+                        std::to_string(insn->address) + ": " + insn->mnemonic + "\t" + insn->op_str);
 }
 
 bool ExecuteSuspend::is_active() {

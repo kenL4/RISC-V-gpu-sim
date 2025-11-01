@@ -8,9 +8,14 @@ void CoalescingUnit::suspend_warp(Warp *warp) {
     blocked_warps[warp] = DRAM_LATENCY;
 }
 
-int CoalescingUnit::load(Warp *warp, uint64_t addr, size_t size) {
+int CoalescingUnit::load(Warp *warp, uint64_t addr, size_t bytes) {
     suspend_warp(warp);
-    return 123;
+    return scratchpad_mem->load(addr, bytes);
+}
+
+void CoalescingUnit::store(Warp *warp, uint64_t addr, size_t bytes, int val) {
+    suspend_warp(warp);
+    scratchpad_mem->store(addr, bytes, val);
 }
 
 bool CoalescingUnit::is_busy() {
@@ -35,6 +40,6 @@ Warp *CoalescingUnit::get_resumable_warp() {
 
 void CoalescingUnit::tick() {
     for (auto &[key, val] : blocked_warps) {
-        val--;
+        if (val > 0) val--;
     }
 }

@@ -2,4 +2,6 @@
     .global _start
 
 _start:
-    lw t0, 0(t0)
+    li t0, 123
+    sw t0, 0(t1)
+    lw t2, 0(t1)

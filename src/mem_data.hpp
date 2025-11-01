@@ -2,9 +2,10 @@
 
 #include "utils.hpp"
 
-// TODO: Properly simulate data memory
 class DataMemory {
 public:
-    int load(uint64_t addr, size_t size);
-    void store(uint64_t addr, size_t size, int val);
+    int load(uint64_t addr, size_t bytes);
+    void store(uint64_t addr, size_t bytes, uint64_t val);
+private:
+    std::map<uint64_t, uint8_t> memory;
 };

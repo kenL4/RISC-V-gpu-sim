@@ -13,22 +13,36 @@ void WarpScheduler::execute() {
         return;
     }
 
-    Warp *top = warp_queue.front();
-    warp_queue.pop();
+    std::queue<Warp *> suspended_queue;
 
-    // Find the first live warp
-    while (top->suspended) {
-        warp_queue.push(top);
+    Warp *scheduled_warp = nullptr;
+    while (!warp_queue.empty()) {
+        if (!warp_queue.front()->suspended) {
+            scheduled_warp = warp_queue.front();
+            warp_queue.pop();
+            break;
+        }
 
-        top = warp_queue.front();
+        suspended_queue.push(warp_queue.front());
         warp_queue.pop();
     }
 
-    // Update pipeline latch
-    PipelineStage::output_latch->updated = true;
-    PipelineStage::output_latch->warp = top;
+    // Reinsert suspended threads into main warp queue
+    while (!suspended_queue.empty()) {
+        Warp *suspended_warp = suspended_queue.front();
+        suspended_queue.pop();
+        warp_queue.push(suspended_warp);
+    }
 
-    log("Warp Scheduler", "Warp " + std::to_string(top->warp_id) + " scheduled to run");
+    // Update pipeline latch
+    PipelineStage::output_latch->updated = scheduled_warp != nullptr;
+    PipelineStage::output_latch->warp = scheduled_warp;
+
+    if (scheduled_warp == nullptr) {
+        log("Warp Scheduler", "No warp ready to be scheduled");    
+        return;
+    }
+    log("Warp Scheduler", "Warp " + std::to_string(scheduled_warp->warp_id) + " scheduled to run");
 }
 
 bool WarpScheduler::is_active() {
