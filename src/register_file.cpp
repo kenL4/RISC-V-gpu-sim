@@ -11,6 +11,9 @@ int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
         warp_id_to_registers[warp_id].resize(registers_per_warp);
         for (auto &reg_vec : warp_id_to_registers[warp_id]) {
             reg_vec.resize(thread_count, 0);
+            for (int i = 0 ; i< reg_vec.size(); i++) {
+                reg_vec[i] = 0;
+            }
         }
     }
 
@@ -24,6 +27,9 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
         warp_id_to_registers[warp_id].resize(registers_per_warp);
         for (auto &reg_vec : warp_id_to_registers[warp_id]) {
             reg_vec.resize(thread_count, 0);
+            for (int i = 0 ; i< reg_vec.size(); i++) {
+                reg_vec[i] = 0;
+            }
         }
     }
 
