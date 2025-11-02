@@ -19,4 +19,7 @@ private:
     int warp_size;
     int warp_count;
     std::queue<Warp*> warp_queue;
+    std::queue<Warp*> new_warp_queue;
+
+    void flush_new_warps();
 };

@@ -69,6 +69,36 @@ execute_result ExecutionUnit::execute(Warp *warp, std::vector<size_t> active_thr
         res.write_required = sh(warp, active_threads, riscv);
     } else if (mnemonic == "sb") {
         res.write_required = sb(warp, active_threads, riscv);
+    } else if (mnemonic == "j") {
+        res.write_required = j(warp, active_threads, riscv);
+    } else if (mnemonic == "jal") {
+        res.write_required = jal(warp, active_threads, riscv);
+    } else if (mnemonic == "jalr") {
+        res.write_required = jalr(warp, active_threads, riscv);
+    } else if (mnemonic == "call") {
+        res.write_required = call(warp, active_threads, riscv);
+    } else if (mnemonic == "ret") {
+        res.write_required = ret(warp, active_threads, riscv);
+    } else if (mnemonic == "beq") {
+        res.write_required = beq(warp, active_threads, riscv);
+    } else if (mnemonic == "bne") {
+        res.write_required = bne(warp, active_threads, riscv);
+    } else if (mnemonic == "blt") {
+        res.write_required = blt(warp, active_threads, riscv);
+    } else if (mnemonic == "bge") {
+        res.write_required = bge(warp, active_threads, riscv);
+    } else if (mnemonic == "bltu") {
+        res.write_required = bltu(warp, active_threads, riscv);
+    } else if (mnemonic == "bgeu") {
+        res.write_required = bgeu(warp, active_threads, riscv);
+    } else if (mnemonic == "ecall") {
+        res.write_required = ecall(warp, active_threads, riscv);
+    } else if (mnemonic == "ebreak") {
+        res.write_required = ebreak(warp, active_threads, riscv);
+    } else if (mnemonic == "mv") {
+        res.write_required = mv(warp, active_threads, riscv);
+    } else if (mnemonic == "ebreak") {
+        res.write_required = nop(warp, active_threads, riscv);
     } else {
         // Default to skip instruction
         // Bit of a hard-coded way to get next instruction
@@ -437,7 +467,7 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads, cs_riscv 
         
         warp->pc[thread] += 4;
     }
-    // After a load instruction, you don't need to writeback unless
+    // After a store instruction, you don't need to writeback unless
     // the warp was never actually suspended
     return !warp->suspended;
 }
@@ -452,7 +482,7 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads, cs_riscv 
         
         warp->pc[thread] += 4;
     }
-    // After a load instruction, you don't need to writeback unless
+    // After a store instruction, you don't need to writeback unless
     // the warp was never actually suspended
     return !warp->suspended;
 }
@@ -467,9 +497,195 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads, cs_riscv 
         
         warp->pc[thread] += 4;
     }
-    // After a load instruction, you don't need to writeback unless
+    // After a store instruction, you don't need to writeback unless
     // the warp was never actually suspended
     return !warp->suspended;
+}
+bool ExecutionUnit::j(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 1);
+
+    for (auto thread : active_threads) {
+        int64_t imm = riscv->operands[0].imm;
+        warp->pc[thread] += imm;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        int rd = riscv->operands[0].reg;
+        int64_t imm = riscv->operands[1].imm;
+
+        rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4);
+        warp->pc[thread] += imm;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::jalr(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rd = riscv->operands[0].reg;
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4);
+        warp->pc[thread] = rs1 + imm;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::call(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 1);
+
+    for (auto thread : active_threads) {
+        int64_t symbol = riscv->operands[0].imm;
+
+        rf->set_register(warp->warp_id, thread, RISCV_REG_RA, warp->pc[thread] + 4);
+        warp->pc[thread] = symbol;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::ret(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 0);
+
+    for (auto thread : active_threads) {
+        int ra = rf->get_register(warp->warp_id, thread, RISCV_REG_RA);
+        warp->pc[thread] = ra;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::beq(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (rs1 == rs2) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::bne(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (rs1 != rs2) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::blt(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (rs1 < rs2) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::bge(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (rs1 >= rs2) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::bltu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (uint64_t(rs1) < uint64_t(rs2)) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::bgeu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 3);
+
+    for (auto thread : active_threads) {
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[0].reg);
+        int rs2 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+        int64_t imm = riscv->operands[2].imm;
+
+        if (uint64_t(rs1) >= uint64_t(rs2)) {
+            warp->pc[thread] += imm;
+        } else {
+            warp->pc[thread] += 4;
+        }
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::ecall(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 0);
+
+    log("Execution Unit", "ecall made");
+    for (auto thread : active_threads) {
+        warp->pc[thread] += 4;
+    }
+    return false;
+}
+bool ExecutionUnit::ebreak(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 0);
+
+    log("Execution Unit", "ebreak made");
+    for (auto thread : active_threads) {
+        warp->pc[thread] += 4;
+    }
+    return false;
+}
+bool ExecutionUnit::mv(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 2);
+
+    for (auto thread : active_threads) {
+        int rd = riscv->operands[0].reg;
+        int rs1 = rf->get_register(warp->warp_id, thread, riscv->operands[1].reg);
+
+        rf->set_register(warp->warp_id, thread, rd, rs1);
+        warp->pc[thread] += 4;
+    }
+    return active_threads.size() > 0;
+}
+bool ExecutionUnit::nop(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv) {
+    assert(riscv->op_count == 0);
+
+    log("Execution Unit", "NOP");
+    return false;
 }
 
 ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr): 

@@ -50,6 +50,21 @@ private:
     bool sw(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool sh(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
     bool sb(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool j(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool jal(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool jalr(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool call(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool ret(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool beq(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool bne(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool blt(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool bge(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool bltu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool bgeu(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool ecall(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool ebreak(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool mv(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
+    bool nop(Warp *warp, std::vector<size_t> active_threads, cs_riscv *riscv);
 };
 
 /*

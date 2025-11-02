@@ -8,8 +8,17 @@ WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc): 
     }
 }
 
+void WarpScheduler::flush_new_warps() {
+    while (new_warp_queue.size() > 0) {
+        warp_queue.push(new_warp_queue.front());
+        new_warp_queue.pop();
+    }
+}
+
 void WarpScheduler::execute() {
     if (warp_queue.empty()) {
+        // Ensure new warps are brought in next cycle
+        flush_new_warps();
         return;
     }
 
@@ -43,6 +52,9 @@ void WarpScheduler::execute() {
         return;
     }
     log("Warp Scheduler", "Warp " + std::to_string(scheduled_warp->warp_id) + " scheduled to run");
+
+    // Ensure new warps are brought in next cycle
+    flush_new_warps();
 }
 
 bool WarpScheduler::is_active() {
@@ -50,10 +62,12 @@ bool WarpScheduler::is_active() {
 }
 
 void WarpScheduler::insert_warp(Warp *warp) {
-    warp_queue.push(warp);
+    new_warp_queue.push(warp);
 }
 
 WarpScheduler::~WarpScheduler() {
+    flush_new_warps();
+
     while (warp_queue.size() > 0) {
         delete warp_queue.front();
         warp_queue.pop();

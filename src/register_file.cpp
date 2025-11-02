@@ -29,7 +29,7 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
 
     // Note: Capstone maintains a REG_INVALID as reg 0 so
     // we subtract 1 to index our register file
-    warp_id_to_registers[warp_id][reg - 1][thread] = value;
+    if (reg != RISCV_REG_ZERO) warp_id_to_registers[warp_id][reg - 1][thread] = value;
 }
 
 RegisterFile::~RegisterFile() {
