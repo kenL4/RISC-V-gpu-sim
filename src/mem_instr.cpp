@@ -1,16 +1,16 @@
 #include "mem_instr.hpp"
 
 InstructionMemory::InstructionMemory(parse_output *data) {
-    insn = data->insn;
-    max_addr = insn[0].address;
-    for (int i = 0; i < data->count; i++) {
-        addr_to_insn[insn[i].address] = insn + i;
-        max_addr = std::max(max_addr, insn[i].address);
-    }
     base_addr = data->base_addr;
+    max_addr = data->max_addr - 4;
+    for (uint64_t i = base_addr; i <= max_addr; i+=4) {
+        uint64_t offset = i - base_addr;
+        addr_to_insn[i] = data->code.data() + offset;
+    }
+    debug_log("Instruction addresses range from " + std::to_string(base_addr) + " -> " + std::to_string(max_addr));
 }
 
-cs_insn *InstructionMemory::get_instruction(uint64_t address) {
+uint8_t *InstructionMemory::get_instruction(uint64_t address) {
     return addr_to_insn[address];
 }
 uint64_t InstructionMemory::get_base_addr() {

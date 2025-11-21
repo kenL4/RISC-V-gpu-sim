@@ -17,16 +17,11 @@ void WritebackResume::execute() {
         warp->suspended = false;
     }
 
-    // Wrong when resuming but not a problem as this output latch's values are
-    // ignored by the warp scheduler
-    // In the future, we might have to pipe the true instruction values through
-    cs_insn *inst = PipelineStage::input_latch->instruction;
-
     PipelineStage::input_latch->updated = false;
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = warp;
     PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
-    PipelineStage::output_latch->instruction = PipelineStage::input_latch->instruction;
+    PipelineStage::output_latch->inst = PipelineStage::input_latch->inst;
     
     log("Writeback/Resume", "Warp " + std::to_string(warp->warp_id) + " values were written back");
 

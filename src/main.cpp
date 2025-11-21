@@ -14,15 +14,15 @@
 #define NUM_LANES 32
 #define NUM_WARPS 1
 
-Pipeline* initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu, RegisterFile *rf) {
+Pipeline* initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu, RegisterFile *rf, LLVMDisassembler *disasm) {
     Pipeline *p = new Pipeline();
 
     // Construct stages
     p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr());
     p->add_stage<ActiveThreadSelection>();
-    p->add_stage<InstructionFetch>(im);
+    p->add_stage<InstructionFetch>(im, disasm);
     p->add_stage<OperandFetch>();
-    p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr());
+    p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm);
     p->add_stage<WritebackResume>(cu, rf);
 
     std::shared_ptr<WarpScheduler> warp_scheduler_stage = std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -68,10 +68,20 @@ int main(int argc, char* argv[]) {
     Config::instance().setRegisterDump(result.count("regdump") > 0);
 
     std::string filename = result["filename"].as<std::string>();
+
+    // Initialize LLVM machine code decoding
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllDisassemblers();
+
+    std::string target_id = "riscv64-unknown-elf";
+    std::string cpu = "generic-rv64";
+    std::string features = "+m,+a,+zfinx";
+    LLVMDisassembler disasm(target_id, cpu, features);
     
     debug_log("Loading ELF file...");
     parse_output out;
-    parse_error parse_err = parse_binary(filename, &out);
+    parse_error parse_err = parse_binary(filename, disasm, &out);
     if (parse_err != PARSE_SUCCESS) {
         std::cout << "Failed to load/parse file: " << filename << std::endl;
         return 1;
@@ -90,14 +100,11 @@ int main(int argc, char* argv[]) {
     RegisterFile rf(register_count, NUM_LANES);
     debug_log("Register file instantiated with " + std::to_string(register_count) + " registers");
 
-    Pipeline *p = initialize_pipeline(&tcim, &cu, &rf);
+    Pipeline *p = initialize_pipeline(&tcim, &cu, &rf, &disasm);
     while (p->has_active_stages()) {
         p->execute();
     }
     delete p;
 
-    // Make sure to clean up the capstone instructions
-    if (out.count > 0) cs_free(out.insn, out.count);
-    cs_close(&out.handle);
     return 0;
 }

@@ -8,10 +8,11 @@
  */
 class InstructionFetch: public PipelineStage {
 public:
-    InstructionFetch(InstructionMemory *im);
+    InstructionFetch(InstructionMemory *im, LLVMDisassembler *disasm);
     void execute() override;
     bool is_active() override;
     ~InstructionFetch() {};
 private:
+    LLVMDisassembler *disasm;
     InstructionMemory *im;
 };

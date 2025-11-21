@@ -6,6 +6,10 @@ RegisterFile::RegisterFile(size_t register_count, size_t thread_count):
         std::to_string(thread_count) + " threads a warp");
 }
 
+int get_register_idx(llvm::MCRegister reg) {
+    return reg - llvm::RISCV::X0;
+}
+
 int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
     if (warp_id_to_registers.count(warp_id) <= 0) {
         warp_id_to_registers[warp_id].resize(registers_per_warp);
@@ -17,9 +21,7 @@ int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
         }
     }
 
-    // Note: Capstone maintains a REG_INVALID as reg 0 so
-    // we subtract 1 to index out register file
-    return warp_id_to_registers[warp_id][reg - 1][thread];
+    return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }
 
 void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value) {
@@ -33,9 +35,7 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
         }
     }
 
-    // Note: Capstone maintains a REG_INVALID as reg 0 so
-    // we subtract 1 to index our register file
-    if (reg != RISCV_REG_ZERO) warp_id_to_registers[warp_id][reg - 1][thread] = value;
+    if (reg != llvm::RISCV::X0) warp_id_to_registers[warp_id][get_register_idx(reg)][thread] = value;
 }
 
 RegisterFile::~RegisterFile() {

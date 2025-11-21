@@ -38,7 +38,7 @@ public:
     bool updated;
     Warp* warp;
     std::vector<uint64_t> active_threads;
-    cs_insn* instruction;
+    llvm::MCInst inst;
 };
 
 /*

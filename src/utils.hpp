@@ -2,12 +2,27 @@
 
 #include <algorithm>
 #include <bits/stdc++.h>
-#include <capstone/capstone.h>
 #include <chrono>
 #include <cinttypes>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDisassembler/MCDisassembler.h"
+#include "llvm/MC/MCDisassembler/MCRelocationInfo.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstPrinter.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCTargetOptions.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Format.h"
+#define GET_REGINFO_ENUM
+#include "gen/llvm_riscv_registers.h"
 #include <map>
 #include <memory>
 #include <queue>
@@ -26,3 +41,13 @@ void debug_log(std::string message);
  * Prints a named message with an associated timestamp
  */
 void log(std::string name, std::string message);
+
+/*
+ * Prints a named error message with an associated timestamp
+ */
+void log_error(std::string name, std::string message);
+
+/*
+ * Returns the string form of an LLVM operand
+ */
+std::string operandToString(const llvm::MCOperand &Op);
