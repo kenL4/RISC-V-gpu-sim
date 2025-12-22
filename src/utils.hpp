@@ -25,12 +25,14 @@
 #include "gen/llvm_riscv_registers.h"
 #include <map>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "config.hpp"
 #include "parser.hpp"
+#include "stats/stats.hpp"
 
 /*
  * Prints a generic message with an associated timestamp

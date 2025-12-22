@@ -38,6 +38,27 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
     if (reg != llvm::RISCV::X0) warp_id_to_registers[warp_id][get_register_idx(reg)][thread] = value;
 }
 
+std::optional<int> RegisterFile::get_csr(uint64_t warp_id, int thread, int csr) {
+    if (warp_id_to_csr.count(warp_id) <= 0) {
+        warp_id_to_csr[warp_id].resize(thread_count);
+    }
+
+    if (warp_id_to_csr[warp_id][thread].find(csr) == warp_id_to_csr[warp_id][thread].end()) {
+        // We return a null optional type before definition
+        return {};
+    }
+
+    return warp_id_to_csr[warp_id][thread][csr];
+}
+
+void RegisterFile::set_csr(uint64_t warp_id, int thread, int csr, int value) {
+    if (warp_id_to_csr.count(warp_id) <= 0) {
+        warp_id_to_csr[warp_id].resize(thread_count);
+    }
+
+    warp_id_to_csr[warp_id][thread][csr] = value;
+}
+
 RegisterFile::~RegisterFile() {
 
 }

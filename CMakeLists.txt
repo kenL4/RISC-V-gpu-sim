@@ -4,7 +4,7 @@ project(RISCVGpuSim LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
 
 # --- LLVM via llvm-config ---
 find_program(LLVM_CONFIG NAMES llvm-config PATHS /usr/local/bin ENV PATH)
@@ -53,6 +53,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(
     ${PROJECT_NAME} 
     PRIVATE 
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE ${LLVM_CXXFLAGS_LIST})

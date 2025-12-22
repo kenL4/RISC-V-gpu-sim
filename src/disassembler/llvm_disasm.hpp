@@ -65,6 +65,22 @@ public:
         if (size == 0) {
             std::cout << "[WARNING] Instruction has no size?" << std::endl;
         }
+
+        if (getOpcodeName(in.getOpcode()) == "PHI") {
+            // Check if we are in a noclPush/Pop case
+            std::string buf_substr = buf.substr(0, 14);
+            if (buf_substr == "00000000:09 00" || buf_substr == "00000000:09 10") {
+                std::string type = buf.substr(12, 1);
+                if (type == "0") {
+                    in.setOpcode(0xFF);
+                } else {
+                    in.setOpcode(0xFE);
+                }
+            } else if (buf_substr == "00000000:08 00") {
+                in.setOpcode(0xFD);
+                // TODO: Implement cache line flush
+            }
+        }
         return in;
     }
 
@@ -76,6 +92,13 @@ public:
     }
 
     std::string getOpcodeName(unsigned int opcode) {
+        if (opcode == 0xFF) {
+            return "NOCLPUSH";
+        } else if (opcode == 0xFE) {
+            return "NOCLPOP";
+        } else if (opcode == 0xFD) {
+            return "CACHE_LINE_FLUSH";
+        }
         return ii->getName(opcode).str();
     }
 private:

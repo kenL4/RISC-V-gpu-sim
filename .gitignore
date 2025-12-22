@@ -7,3 +7,9 @@ cmake_install.cmake
 
 # VSCODE
 .vscode/
+
+# Clangd
+.cache/
+
+# Debug traces
+trace*.log
