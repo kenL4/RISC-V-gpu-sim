@@ -1,7 +1,8 @@
 #include "pipeline_writeback.hpp"
 
-WritebackResume::WritebackResume(CoalescingUnit *cu, RegisterFile *rf)
-    : cu(cu), rf(rf) {
+WritebackResume::WritebackResume(CoalescingUnit *cu, RegisterFile *rf,
+                                 bool is_gpu)
+    : cu(cu), rf(rf), is_gpu(is_gpu) {
   log("Writeback/Resume", "Initializing Writeback/Resume pipeline stage");
 }
 
@@ -21,7 +22,10 @@ void WritebackResume::execute() {
 
   // At this point, we know an instructions has successfully
   // executed OR it has been resumed
-  GPUStatisticsManager::instance().increment_gpu_instrs();
+  if (is_gpu)
+    GPUStatisticsManager::instance().increment_gpu_instrs();
+  else
+    GPUStatisticsManager::instance().increment_cpu_instrs();
 
   PipelineStage::input_latch->updated = false;
   PipelineStage::output_latch->updated = true;

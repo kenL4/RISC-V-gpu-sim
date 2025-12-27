@@ -29,7 +29,7 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf);
+  p->add_stage<WritebackResume>(cu, rf, false);
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -67,7 +67,7 @@ Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf);
+  p->add_stage<WritebackResume>(cu, rf, true);
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
   // Execute the threads
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages()) {
-    if (gpu_controller.is_gpu_active())
+    if (gpu_pipeline->has_active_stages())
       GPUStatisticsManager::instance().increment_gpu_cycles();
 
     cpu_pipeline->execute();
@@ -191,11 +191,13 @@ int main(int argc, char *argv[]) {
 
   std::cerr << std::endl << "[Summary]" << std::endl;
   uint64_t cycles = (GPUStatisticsManager::instance().get_gpu_cycles());
-  uint64_t instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
-  double ipc = ((double)instrs / (double)cycles);
+  uint64_t gpu_instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
+  uint64_t cpu_instrs = (GPUStatisticsManager::instance().get_cpu_instrs());
+  double ipc = ((double)gpu_instrs / (double)cycles);
   uint64_t dram_accs = (GPUStatisticsManager::instance().get_dram_accs());
   std::cerr << "Cycles: " << cycles << std::endl;
-  std::cerr << "Instrs: " << instrs << std::endl;
+  std::cerr << "GPU Instrs: " << gpu_instrs << std::endl;
+  std::cerr << "CPU Instrs: " << cpu_instrs << std::endl;
   std::cerr << "IPC: " << ipc << std::endl;
   std::cerr << "DRAMAccs: " << dram_accs << std::endl;
 
