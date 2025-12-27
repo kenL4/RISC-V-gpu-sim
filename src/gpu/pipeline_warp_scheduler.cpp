@@ -64,7 +64,7 @@ void WarpScheduler::execute() {
 }
 
 bool WarpScheduler::is_active() {
-  return warp_queue.size() > 0; // || PipelineStage::input_latch->updated;
+  return warp_queue.size() > 0 || new_warp_queue.size() > 0;
 }
 
 void WarpScheduler::insert_warp(Warp *warp) { new_warp_queue.push(warp); }

@@ -96,10 +96,6 @@ void test_coalesce_latency() {
       break; // Safety break
   }
 
-  // Should recall get_resumable_warp one last time if it finished exactly at
-  // tick? Actually get_resumable_warp removes it from blocked_warps. If loop
-  // finished, unit is not busy, meaning blocked_warps is empty.
-
   // Verify we spent at least 1 tick (L1 latency is 1, DRAM is 2)
   assert(ticks >= 1);
 
