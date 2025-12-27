@@ -15,16 +15,32 @@ Recursively clone the repo:
 ```git clone --recursive https://github.com/kenL4/RISC-V-gpu-sim.git```
 
 To build the simulator:
+```bash
+make
 ```
+This will automatically create the `build/` directory, configure with CMake, and build the project.
+Alternatively, you can build manually using CMake:
+```bash
 mkdir build && cd build
 cmake ..
-cmake --build .
+make
 ```
 
-To run an example binary on the simulator:
+## Running Tests
+To build and run the unit test suite:
+```bash
+make test
 ```
+
+## Running the Simulator
+To run an example binary on the simulator:
+```bash
+# 1. Build the example kernel (requires RISC-V compiler)
 cd examples/example1
 make all
-cd ../../build
-./RISCVGpuSim examples/example1/kernel
+cd ../..
+
+# 2. Run the simulator
+# Usage: ./RISCVGpuSim <path_to_kernel_binary>
+build/RISCVGpuSim examples/example1/kernel
 ```

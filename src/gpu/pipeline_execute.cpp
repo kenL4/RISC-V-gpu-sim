@@ -1,4 +1,5 @@
 #include "pipeline_execute.hpp"
+#include "../disassembler/llvm_disasm.hpp"
 
 // In RISC-V, Word is always 32-bit (4 bytes)
 #define WORD_SIZE 4
@@ -83,6 +84,8 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = bge(warp, active_threads, &inst);
   } else if (mnemonic == "BGEU") {
     res.write_required = bgeu(warp, active_threads, &inst);
+  } else if (mnemonic == "SLT") {
+    res.write_required = slt(warp, active_threads, &inst);
   } else if (mnemonic == "SLTI") {
     res.write_required = slti(warp, active_threads, &inst);
   } else if (mnemonic == "SLTIU") {
@@ -701,6 +704,22 @@ bool ExecutionUnit::slti(Warp *warp, std::vector<size_t> active_threads,
         rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
     int64_t imm = in->getOperand(2).getImm();
     rf->set_register(warp->warp_id, thread, rd, (rs1 < imm) ? 1 : 0);
+
+    warp->pc[thread] += 4;
+  }
+  return active_threads.size() > 0;
+}
+
+bool ExecutionUnit::slt(Warp *warp, std::vector<size_t> active_threads,
+                        MCInst *in) {
+  assert(in->getNumOperands() == 3);
+  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
+    rf->set_register(warp->warp_id, thread, rd, (rs1 < rs2) ? 1 : 0);
 
     warp->pc[thread] += 4;
   }

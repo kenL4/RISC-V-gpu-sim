@@ -1,4 +1,5 @@
 #include "cxxopts.hpp"
+#include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline.hpp"
 #include "gpu/pipeline_ats.hpp"
 #include "gpu/pipeline_execute.hpp"

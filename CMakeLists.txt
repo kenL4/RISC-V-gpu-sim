@@ -69,6 +69,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE gpu_sim_lib)
 
 # --- Unit Tests ---
 enable_testing()
-add_executable(unit_tests tests/unit_tests.cpp tests/test_memory.cpp tests/test_host.cpp)
+add_executable(unit_tests tests/unit_tests.cpp tests/test_memory.cpp tests/test_host.cpp tests/test_pipeline.cpp tests/test_pipeline_scheduler.cpp tests/test_pipeline_execute.cpp)
 target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(unit_tests PRIVATE gpu_sim_lib)

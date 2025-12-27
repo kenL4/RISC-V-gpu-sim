@@ -59,14 +59,6 @@ void test_host_gpu_control() {
   ctrl.set_scheduler(scheduler);
 
   // Launch kernel
-  // Dims 1024, Warp size 32 -> 32 warps
-  // WarpScheduler warp_count is 8. Wait, WarpScheduler warp_count limit is a
-  // hardware constraints? host_gpu_control.cpp: launch_kernel calculates
-  // num_warps based on dims/warp_size. loops num_warps and inserts into
-  // scheduler.
-
-  // We should mock logic? No, let's use real one.
-  // If we launch 1024 threads (32 warps)
   ctrl.launch_kernel();
 
   assert(ctrl.is_gpu_active());
