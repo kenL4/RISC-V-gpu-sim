@@ -4,7 +4,9 @@ project(RISCVGpuSim LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main.cpp$")
+set(MAIN_SOURCE src/main.cpp)
 
 # --- LLVM via llvm-config ---
 find_program(LLVM_CONFIG NAMES llvm-config PATHS /usr/local/bin ENV PATH)
@@ -47,22 +49,26 @@ target_include_directories(cxxopts INTERFACE ${CMAKE_SOURCE_DIR}/include)
 add_library(elfio INTERFACE)
 target_include_directories(elfio INTERFACE ${CMAKE_SOURCE_DIR}/include/elfio)
 
-# --- Build executable ---
-add_executable(${PROJECT_NAME} ${SOURCES})
-
-target_include_directories(
-    ${PROJECT_NAME} 
-    PRIVATE 
-    ${CMAKE_SOURCE_DIR}/src
+# --- Library Target ---
+add_library(gpu_sim_lib ${LIB_SOURCES})
+target_include_directories(gpu_sim_lib PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_options(gpu_sim_lib PUBLIC ${LLVM_CXXFLAGS_LIST})
+target_compile_options(gpu_sim_lib PUBLIC -fexceptions)
+target_link_options(gpu_sim_lib PRIVATE ${LLVM_LDFLAGS_LIST})
+target_link_libraries(gpu_sim_lib
+    PUBLIC cxxopts
+    PUBLIC elfio
+    PUBLIC ${LLVM_LIBS_LIST}
+    PUBLIC ${LLVM_SYSTEM_LIBS_LIST}
 )
 
-target_compile_options(${PROJECT_NAME} PRIVATE ${LLVM_CXXFLAGS_LIST})
-target_compile_options(${PROJECT_NAME} PRIVATE -fexceptions)
-target_link_options(${PROJECT_NAME} PRIVATE ${LLVM_LDFLAGS_LIST})
+# --- Main Executable ---
+add_executable(${PROJECT_NAME} ${MAIN_SOURCE})
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(${PROJECT_NAME} PRIVATE gpu_sim_lib)
 
-target_link_libraries(${PROJECT_NAME}
-    PRIVATE cxxopts
-    PRIVATE elfio
-    PRIVATE ${LLVM_LIBS_LIST}
-    PRIVATE ${LLVM_SYSTEM_LIBS_LIST}
-)
+# --- Unit Tests ---
+enable_testing()
+add_executable(unit_tests tests/unit_tests.cpp tests/test_memory.cpp)
+target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(unit_tests PRIVATE gpu_sim_lib)
