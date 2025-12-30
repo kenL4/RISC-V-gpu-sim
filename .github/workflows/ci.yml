@@ -21,7 +21,7 @@ jobs:
       
       - name: Install LLVM 21
         run: |
-          bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+          sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
           llvm-config --version
 
       - name: Build simulator
