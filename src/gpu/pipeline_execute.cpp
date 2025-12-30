@@ -396,163 +396,212 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    int res = cu->load(warp, rs1 + disp, WORD_SIZE);
+  std::vector<uint64_t> addresses;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
 
-    // Eventhough we update the register values here
-    // The warp will be suspended so the updates won't be visible
-    // till after it resumes
-    rf->set_register(warp->warp_id, thread, rd, res);
-    warp->pc[thread] += 4;
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    valid_threads.push_back(thread);
   }
-  // After a load instruction, you don't need to writeback unless
-  // the warp was never actually suspended
+
+  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE);
+
+  for (size_t i = 0; i < results.size(); i++) {
+    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
+    warp->pc[valid_threads[i]] += 4;
+  }
+
   return !warp->suspended;
 }
+
 bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    int res = cu->load(warp, rs1 + disp, WORD_SIZE / 2);
+  std::vector<uint64_t> addresses;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
 
-    // Eventhough we update the register values here
-    // The warp will be suspended so the updates won't be visible
-    // till after it resumes
-    rf->set_register(warp->warp_id, thread, rd, res);
-    warp->pc[thread] += 4;
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    valid_threads.push_back(thread);
   }
-  // After a load instruction, you don't need to writeback unless
-  // the warp was never actually suspended
+
+  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
+
+  for (size_t i = 0; i < results.size(); i++) {
+    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
+    warp->pc[valid_threads[i]] += 4;
+  }
+
   return !warp->suspended;
 }
+
 bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    ;
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    int res = uint64_t(cu->load(warp, rs1 + disp, WORD_SIZE / 2));
+  std::vector<uint64_t> addresses;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
 
-    // Eventhough we update the register values here
-    // The warp will be suspended so the updates won't be visible
-    // till after it resumes
-    rf->set_register(warp->warp_id, thread, rd, res);
-    warp->pc[thread] += 4;
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    valid_threads.push_back(thread);
   }
-  // After a load instruction, you don't need to writeback unless
-  // the warp was never actually suspended
+
+  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
+
+  for (size_t i = 0; i < results.size(); i++) {
+    rf->set_register(warp->warp_id, valid_threads[i], rd,
+                     static_cast<uint64_t>(results[i]));
+    warp->pc[valid_threads[i]] += 4;
+  }
+
   return !warp->suspended;
 }
+
 bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    ;
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    int res = cu->load(warp, rs1 + disp, 1);
+  std::vector<uint64_t> addresses;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
 
-    // Eventhough we update the register values here
-    // The warp will be suspended so the updates won't be visible
-    // till after it resumes
-    rf->set_register(warp->warp_id, thread, rd, res);
-    warp->pc[thread] += 4;
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    valid_threads.push_back(thread);
   }
-  // After a load instruction, you don't need to writeback unless
-  // the warp was never actually suspended
+
+  std::vector<int> results = cu->load(warp, addresses, 1);
+
+  for (size_t i = 0; i < results.size(); i++) {
+    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
+    warp->pc[valid_threads[i]] += 4;
+  }
+
   return !warp->suspended;
 }
+
 bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    ;
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    int res = uint64_t(cu->load(warp, rs1 + disp, 1));
+  std::vector<uint64_t> addresses;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
 
-    // Eventhough we update the register values here
-    // The warp will be suspended so the updates won't be visible
-    // till after it resumes
-    rf->set_register(warp->warp_id, thread, rd, res);
-    warp->pc[thread] += 4;
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    valid_threads.push_back(thread);
   }
-  // After a load instruction, you don't need to writeback unless
-  // the warp was never actually suspended
+
+  std::vector<int> results = cu->load(warp, addresses, 1);
+
+  for (size_t i = 0; i < results.size(); i++) {
+    rf->set_register(warp->warp_id, valid_threads[i], rd,
+                     static_cast<uint64_t>(results[i]));
+    warp->pc[valid_threads[i]] += 4;
+  }
+
   return !warp->suspended;
 }
+
 bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  std::vector<uint64_t> addresses;
+  std::vector<int> values;
+  std::vector<size_t> valid_threads;
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
+  unsigned int rs2_reg = in->getOperand(0).getReg();
+
   for (auto thread : active_threads) {
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
     int rs1 = rf->get_register(warp->warp_id, thread, base);
-    cu->store(warp, rs1 + disp, WORD_SIZE, rs2);
+    addresses.push_back(rs1 + disp);
+    values.push_back(rs2);
+    valid_threads.push_back(thread);
+  }
+
+  cu->store(warp, addresses, WORD_SIZE, values);
+
+  for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
-  // After a store instruction, you don't need to writeback unless
-  // the warp was never actually suspended
   return !warp->suspended;
 }
+
 bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    ;
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    cu->store(warp, rs1 + disp, WORD_SIZE / 2, rs2);
+  std::vector<uint64_t> addresses;
+  std::vector<int> values;
+  std::vector<size_t> valid_threads;
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
+  unsigned int rs2_reg = in->getOperand(0).getReg();
 
+  for (auto thread : active_threads) {
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    values.push_back(rs2);
+    valid_threads.push_back(thread);
+  }
+
+  cu->store(warp, addresses, WORD_SIZE / 2, values);
+
+  for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
-  // After a store instruction, you don't need to writeback unless
-  // the warp was never actually suspended
   return !warp->suspended;
 }
+
 bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  for (auto thread : active_threads) {
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
-    unsigned int base = in->getOperand(1).getReg();
-    int64_t disp = in->getOperand(2).getImm();
-    ;
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
-    cu->store(warp, rs1 + disp, 1, rs2);
+  std::vector<uint64_t> addresses;
+  std::vector<int> values;
+  std::vector<size_t> valid_threads;
+  unsigned int base = in->getOperand(1).getReg();
+  int64_t disp = in->getOperand(2).getImm();
+  unsigned int rs2_reg = in->getOperand(0).getReg();
 
+  for (auto thread : active_threads) {
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
+    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    addresses.push_back(rs1 + disp);
+    values.push_back(rs2);
+    valid_threads.push_back(thread);
+  }
+
+  cu->store(warp, addresses, 1, values);
+
+  for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
-  // After a store instruction, you don't need to writeback unless
-  // the warp was never actually suspended
   return !warp->suspended;
 }
 bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads,
@@ -940,7 +989,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         val = GPUStatisticsManager::instance().get_gpu_instrs();
         break;
       case 9:
-        val = GPUStatisticsManager::instance().get_dram_accs();
+        val = GPUStatisticsManager::instance().get_gpu_dram_accs();
         break;
       default:
         val = 0;

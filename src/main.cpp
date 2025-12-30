@@ -168,10 +168,12 @@ int main(int argc, char *argv[]) {
   // Execute the threads
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages()) {
-    if (gpu_pipeline->has_active_stages())
+    if (gpu_pipeline->has_active_stages()) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
+    }
 
     cpu_pipeline->execute();
+    cu.tick();
     gpu_pipeline->execute();
   }
 
@@ -194,12 +196,14 @@ int main(int argc, char *argv[]) {
   uint64_t gpu_instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
   uint64_t cpu_instrs = (GPUStatisticsManager::instance().get_cpu_instrs());
   double ipc = ((double)gpu_instrs / (double)cycles);
-  uint64_t dram_accs = (GPUStatisticsManager::instance().get_dram_accs());
-  std::cerr << "Cycles: " << cycles << std::endl;
+  uint64_t gpu_dram_accs = (GPUStatisticsManager::instance().get_gpu_dram_accs());
+  uint64_t cpu_dram_accs = (GPUStatisticsManager::instance().get_cpu_dram_accs());
+  std::cerr << "GPU Cycles: " << cycles << std::endl;
   std::cerr << "GPU Instrs: " << gpu_instrs << std::endl;
   std::cerr << "CPU Instrs: " << cpu_instrs << std::endl;
   std::cerr << "IPC: " << ipc << std::endl;
-  std::cerr << "DRAMAccs: " << dram_accs << std::endl;
+  std::cerr << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
+  std::cerr << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
 
   delete cpu_pipeline;
   delete gpu_pipeline;

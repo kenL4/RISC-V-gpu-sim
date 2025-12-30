@@ -77,8 +77,10 @@ void test_coalesce_latency() {
   assert(!unit.is_busy());
   assert(!w.suspended);
 
-  // Trigger load
-  unit.load(&w, 0x2000, 4);
+  // Trigger load with vector
+  std::vector<uint64_t> addresses = {0x2000, 0x2004, 0x2008,
+                                     0x200C}; // 1 burst (same block)
+  unit.load(&w, addresses, 4);
 
   assert(w.suspended);
   assert(unit.is_busy());
@@ -92,12 +94,13 @@ void test_coalesce_latency() {
       assert(resumed == &w);
     }
     ticks++;
-    if (ticks > 100)
+    if (ticks > 200)
       break; // Safety break
   }
 
-  // Verify we spent at least 1 tick (L1 latency is 1, DRAM is 2)
-  assert(ticks >= 1);
+  // Base latency (100) + 1 burst (4) = 104
+  // Allow small margin if logic changes slightly
+  assert(ticks >= 100);
 
   std::cout << "test_coalesce_latency passed!" << std::endl;
 }

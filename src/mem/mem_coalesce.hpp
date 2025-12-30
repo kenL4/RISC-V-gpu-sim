@@ -8,8 +8,10 @@ class CoalescingUnit {
 public:
   CoalescingUnit(DataMemory *scratchpad_mem)
       : scratchpad_mem(scratchpad_mem) {};
-  int load(Warp *warp, uint64_t addr, size_t bytes);
-  void store(Warp *warp, uint64_t addr, size_t bytes, int val);
+  std::vector<int> load(Warp *warp, const std::vector<uint64_t> &addrs,
+                        size_t bytes);
+  void store(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
+             const std::vector<int> &vals);
   bool is_busy();
   Warp *get_resumable_warp();
   void tick();
@@ -18,5 +20,7 @@ private:
   std::map<Warp *, size_t> blocked_warps;
   DataMemory *scratchpad_mem;
 
-  void suspend_warp(Warp *warp);
+  void suspend_warp(Warp *warp, const std::vector<uint64_t> &addrs,
+                    size_t access_size);
+  int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size);
 };

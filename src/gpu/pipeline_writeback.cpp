@@ -6,7 +6,6 @@ WritebackResume::WritebackResume(CoalescingUnit *cu, RegisterFile *rf)
 }
 
 void WritebackResume::execute() {
-  cu->tick();
 
   // Take the thread from execute unless not busy then
   // resume from suspended

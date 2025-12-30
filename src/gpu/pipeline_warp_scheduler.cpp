@@ -21,9 +21,10 @@ void WarpScheduler::flush_new_warps() {
 }
 
 void WarpScheduler::execute() {
+  // Flush new warps at the start so they're available for scheduling this cycle
+  flush_new_warps();
+
   if (warp_queue.empty()) {
-    // Ensure new warps are brought in next cycle
-    flush_new_warps();
     return;
   }
 
@@ -58,9 +59,6 @@ void WarpScheduler::execute() {
   }
   log("Warp Scheduler",
       "Warp " + std::to_string(scheduled_warp->warp_id) + " scheduled to run");
-
-  // Ensure new warps are brought in next cycle
-  flush_new_warps();
 }
 
 bool WarpScheduler::is_active() {

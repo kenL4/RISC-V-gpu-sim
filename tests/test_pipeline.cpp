@@ -136,8 +136,8 @@ void test_writeback_latch() {
   output.updated = false;
 
   Warp warp2(1, 32, 0x0, false);
-  // Simulate warp2 blocking on memory
-  cu.load(&warp2, 0x1000, 4);
+  std::vector<uint64_t> addrs = {0x1000};
+  cu.load(&warp2, addrs, 4);
   assert(warp2.suspended == true);
 
   // Advance time to satisfy latency
