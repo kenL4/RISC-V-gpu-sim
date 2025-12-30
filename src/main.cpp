@@ -98,12 +98,12 @@ int main(int argc, char *argv[]) {
                            "A software simulator for a RISC-V GPU");
 
   options.add_options()("filename", "Input filename",
-                        cxxopts::value<std::string>())
-     ("d,debug", "Turn on debugging logs")
-     ("c,cpu-debug", "Turn on CPU debugging logs")
-     ("r,regdump", "Dump the register values after each writeback stage")
-     ("s,statsonly", "Do not print anything aside from the final stats")
-     ("h,help", "Show help");
+                        cxxopts::value<std::string>())(
+      "d,debug", "Turn on debugging logs")("c,cpu-debug",
+                                           "Turn on CPU debugging logs")(
+      "r,regdump", "Dump the register values after each writeback stage")(
+      "s,statsonly", "Do not print anything aside from the final stats")(
+      "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);
@@ -120,10 +120,10 @@ int main(int argc, char *argv[]) {
 
   std::string filename = result["filename"].as<std::string>();
 
-  // Initialize LLVM machine code decoding
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllDisassemblers();
+  // Initialize LLVM machine code decoding (RISC-V only)
+  LLVMInitializeRISCVTargetInfo();
+  LLVMInitializeRISCVTargetMC();
+  LLVMInitializeRISCVDisassembler();
 
   std::string target_id = "riscv64-unknown-elf";
   std::string cpu = "generic-rv64";
@@ -180,27 +180,33 @@ int main(int argc, char *argv[]) {
   }
 
   std::string output = gpu_controller.get_buffer();
-  if (!Config::instance().isStatsOnly()) std::cout << std::endl << "[Results]" << std::endl;
-  if (!Config::instance().isStatsOnly()) std::cout << output;
+  if (!Config::instance().isStatsOnly())
+    std::cout << std::endl << "[Results]" << std::endl;
+  if (!Config::instance().isStatsOnly())
+    std::cout << output;
   uint64_t sum = 0;
   for (int i = 0; i < output.size(); i++) {
     if (output[i] == '1') {
       sum += 1;
     }
   }
-  if (!Config::instance().isStatsOnly()) 
-    std::cout << ((sum == 0) ? "All passed!"
-                           : std::to_string(NUM_LANES * NUM_WARPS - sum) +
-                              " passed, " + std::to_string(sum) + " failed")
-              << std::endl << std::endl;
+  if (!Config::instance().isStatsOnly())
+    std::cout << ((sum == 0)
+                      ? "All passed!"
+                      : std::to_string(NUM_LANES * NUM_WARPS - sum) +
+                            " passed, " + std::to_string(sum) + " failed")
+              << std::endl
+              << std::endl;
 
   std::cout << "[Statistics]" << std::endl;
   uint64_t cycles = (GPUStatisticsManager::instance().get_gpu_cycles());
   uint64_t gpu_instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
   uint64_t cpu_instrs = (GPUStatisticsManager::instance().get_cpu_instrs());
   double ipc = ((double)gpu_instrs / (double)cycles);
-  uint64_t gpu_dram_accs = (GPUStatisticsManager::instance().get_gpu_dram_accs());
-  uint64_t cpu_dram_accs = (GPUStatisticsManager::instance().get_cpu_dram_accs());
+  uint64_t gpu_dram_accs =
+      (GPUStatisticsManager::instance().get_gpu_dram_accs());
+  uint64_t cpu_dram_accs =
+      (GPUStatisticsManager::instance().get_cpu_dram_accs());
   std::cout << "GPU Cycles: " << cycles << std::endl;
   std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
   std::cout << "CPU Instrs: " << cpu_instrs << std::endl;

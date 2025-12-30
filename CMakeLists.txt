@@ -1,46 +1,31 @@
 cmake_minimum_required(VERSION 3.15)
-project(RISCVGpuSim LANGUAGES CXX)
+project(RISCVGpuSim LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# --- LLVM stuff ---
+find_package(LLVM REQUIRED CONFIG)
+set(LLVM_COMPONENTS
+    Core
+    Support
+    MC
+    MCParser
+    MCDisassembler
+    Object
+    Target
+    RISCV
+)
+llvm_map_components_to_libnames(LLVM_LIBS ${LLVM_COMPONENTS})
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "LLVM include dirs: ${LLVM_INCLUDE_DIRS}")
+message(STATUS "LLVM libraries: ${LLVM_LIBS}")
+
+# --- Source files ---
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main.cpp$")
 set(MAIN_SOURCE src/main.cpp)
-
-# --- LLVM via llvm-config ---
-find_program(LLVM_CONFIG NAMES llvm-config PATHS /usr/local/bin ENV PATH)
-if(NOT LLVM_CONFIG)
-    message(FATAL_ERROR "llvm-config not found. Ensure LLVM is installed and in PATH.")
-endif()
-
-# Get LLVM flags
-execute_process(
-    COMMAND ${LLVM_CONFIG} --cxxflags
-    OUTPUT_VARIABLE LLVM_CXXFLAGS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-    COMMAND ${LLVM_CONFIG} --ldflags
-    OUTPUT_VARIABLE LLVM_LDFLAGS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-    COMMAND ${LLVM_CONFIG} --libs all
-    OUTPUT_VARIABLE LLVM_LIBS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-    COMMAND ${LLVM_CONFIG} --system-libs
-    OUTPUT_VARIABLE LLVM_SYSTEM_LIBS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-# Convert flags into CMake lists
-separate_arguments(LLVM_CXXFLAGS_LIST NATIVE_COMMAND "${LLVM_CXXFLAGS}")
-separate_arguments(LLVM_LDFLAGS_LIST NATIVE_COMMAND "${LLVM_LDFLAGS}")
-separate_arguments(LLVM_LIBS_LIST NATIVE_COMMAND "${LLVM_LIBS}")
-separate_arguments(LLVM_SYSTEM_LIBS_LIST NATIVE_COMMAND "${LLVM_SYSTEM_LIBS}")
 
 # --- Dependencies ---
 add_library(cxxopts INTERFACE)
@@ -51,24 +36,32 @@ target_include_directories(elfio INTERFACE ${CMAKE_SOURCE_DIR}/include/elfio)
 
 # --- Library Target ---
 add_library(gpu_sim_lib ${LIB_SOURCES})
-target_include_directories(gpu_sim_lib PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_compile_options(gpu_sim_lib PUBLIC ${LLVM_CXXFLAGS_LIST})
-target_compile_options(gpu_sim_lib PUBLIC -fexceptions)
-target_link_options(gpu_sim_lib PRIVATE ${LLVM_LDFLAGS_LIST})
+target_include_directories(gpu_sim_lib
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
+    PUBLIC ${LLVM_INCLUDE_DIRS}
+)
+target_compile_options(gpu_sim_lib PRIVATE -fexceptions)
+target_compile_definitions(gpu_sim_lib PUBLIC ${LLVM_DEFINITIONS_LIST})
 target_link_libraries(gpu_sim_lib
     PUBLIC cxxopts
     PUBLIC elfio
-    PUBLIC ${LLVM_LIBS_LIST}
-    PUBLIC ${LLVM_SYSTEM_LIBS_LIST}
+    PUBLIC ${LLVM_LIBS}
 )
 
 # --- Main Executable ---
 add_executable(${PROJECT_NAME} ${MAIN_SOURCE})
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_link_libraries(${PROJECT_NAME} PRIVATE gpu_sim_lib)
 
 # --- Unit Tests ---
 enable_testing()
-add_executable(unit_tests tests/unit_tests.cpp tests/test_memory.cpp tests/test_host.cpp tests/test_pipeline.cpp tests/test_pipeline_scheduler.cpp tests/test_pipeline_execute.cpp)
-target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_executable(unit_tests
+    tests/unit_tests.cpp
+    tests/test_memory.cpp
+    tests/test_host.cpp
+    tests/test_pipeline.cpp
+    tests/test_pipeline_scheduler.cpp
+    tests/test_pipeline_execute.cpp
+)
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_link_libraries(unit_tests PRIVATE gpu_sim_lib)

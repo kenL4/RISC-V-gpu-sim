@@ -7,7 +7,7 @@ On Ubuntu 24.04, we can do:
 ```
 sudo apt install gcc-riscv64-unknown-elf
 ```
-You must also build LLVM with ```RISCV``` as one of the targets and install it to ```PATH```.<br>
+You must also install LLVM with ```RISCV``` as one of the targets and install it to ```PATH```. You can find ways to install the latest stable releases at the <a href="https://apt.llvm.org/">LLVM website</a>.<br>
 Statically included dependencies: ```cxxopts, ELFIO```
 
 ## Getting started

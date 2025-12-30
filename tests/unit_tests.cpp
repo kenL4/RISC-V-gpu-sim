@@ -10,9 +10,10 @@ int main() {
   std::cout << "Starting Unit Tests..." << std::endl;
 
   // Initialize LLVM for disassembler tests
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllDisassemblers();
+  // Initialize LLVM machine code decoding (RISC-V only)
+  LLVMInitializeRISCVTargetInfo();
+  LLVMInitializeRISCVTargetMC();
+  LLVMInitializeRISCVDisassembler();
 
   test_data_memory_load_store();
   test_instr_memory();
