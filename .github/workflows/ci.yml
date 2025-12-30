@@ -21,9 +21,8 @@ jobs:
       
       - name: Install LLVM 21
         run: |
-          echo llvm
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo apt-get install -y libllvm-21-ocaml-dev libllvm21 llvm-21 llvm-21-dev llvm-21-doc llvm-21-examples llvm-21-runtime
+          bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+          llvm-config --version
 
       - name: Build simulator
         run: make
