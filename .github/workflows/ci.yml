@@ -19,10 +19,9 @@ jobs:
             build-essential \
             cmake \
       
-      - name: Install LLVM 21
+      - name: Install latest LLVM
         run: |
           sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
-          llvm-config --version
 
       - name: Build simulator
         run: make
