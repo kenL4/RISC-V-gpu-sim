@@ -1,5 +1,6 @@
 #include "pipeline_execute.hpp"
 #include "../disassembler/llvm_disasm.hpp"
+#include "../stats/stats.hpp"
 
 // In RISC-V, Word is always 32-bit (4 bytes)
 #define WORD_SIZE 4
@@ -12,7 +13,7 @@ ExecutionUnit::ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf,
 execute_result ExecutionUnit::execute(Warp *warp,
                                       std::vector<size_t> active_threads,
                                       MCInst &inst) {
-  execute_result res{true, false};
+  execute_result res{true, false, true};
 
   std::string mnemonic = disasm->getOpcodeName(inst.getOpcode());
   if (mnemonic == "ADDI") {
@@ -106,8 +107,13 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = csrrw(warp, active_threads, &inst);
   } else if (mnemonic == "NOCLPUSH") {
     res.write_required = noclpush(warp, active_threads, &inst);
+    // NOCLPUSH aliases with Converge (uncounted). We cannot distinguish them (0
+    // operands). Logic in ExecuteSuspend will double-count NOCLPOP to account
+    // for the matching Push.
+    res.counted = false;
   } else if (mnemonic == "NOCLPOP") {
     res.write_required = noclpop(warp, active_threads, &inst);
+    res.counted = false;
   } else if (mnemonic == "CACHE_LINE_FLUSH") {
     res.write_required = cache_line_flush(warp, active_threads, &inst);
   } else {
@@ -116,6 +122,7 @@ execute_result ExecutionUnit::execute(Warp *warp,
       warp->pc[thread] += 4;
     }
     res.success = false;
+    res.counted = false;
     std::cout << "[WARNING] Unknown instruction " << mnemonic << std::endl;
   }
   return res;
@@ -923,9 +930,24 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     case 0x827:
       gpu_controller->set_dims(rs1_val);
       break;
-    case 0x828:
-      rf->set_csr(warp->warp_id, thread, 0x825, 0);
-      break;
+    case 0x828: {
+      uint64_t val = 0;
+      switch (rs1_val) {
+      case 0:
+        val = GPUStatisticsManager::instance().get_gpu_cycles();
+        break;
+      case 1:
+        val = GPUStatisticsManager::instance().get_gpu_instrs();
+        break;
+      case 9:
+        val = GPUStatisticsManager::instance().get_dram_accs();
+        break;
+      default:
+        val = 0;
+        break;
+      }
+      rf->set_csr(warp->warp_id, thread, 0x825, val);
+    } break;
     case 0x830: {
       std::optional<int> val = rf->get_csr(warp->warp_id, thread, 0x830);
       if (val.has_value()) {
@@ -1011,6 +1033,16 @@ void ExecuteSuspend::execute() {
       PipelineStage::input_latch->active_threads;
 
   execute_result result = eu->execute(warp, active_threads, inst);
+
+  if (result.success && result.counted) {
+    if (!warp->is_cpu) {
+      GPUStatisticsManager::instance().increment_gpu_instrs(
+          active_threads.size());
+    } else {
+      GPUStatisticsManager::instance().increment_cpu_instrs();
+    }
+  }
+
   for (int i = 0; i < warp->size; i++) {
     if (!warp->finished[i] && warp->pc[i] <= max_addr) {
       insert_warp(warp);

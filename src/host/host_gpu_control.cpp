@@ -16,7 +16,7 @@ uint64_t HostGPUControl::get_arg_ptr() { return arg_ptr; }
 
 void HostGPUControl::launch_kernel() {
   int warp_size = NUM_LANES;
-  int num_warps = (dims + warp_size - 1) / warp_size;
+  int num_warps = 64;
 
   for (int i = 0; i < num_warps; i++) {
     Warp *warp = new Warp(i, warp_size, kernel_pc, false);
@@ -40,9 +40,5 @@ bool HostGPUControl::is_gpu_active() {
   return false;
 }
 
-void HostGPUControl::buffer_data(char val) {
-  buf += val;
-}
-std::string HostGPUControl::get_buffer() {
-  return buf;
-}
+void HostGPUControl::buffer_data(char val) { buf += val; }
+std::string HostGPUControl::get_buffer() { return buf; }

@@ -14,7 +14,7 @@
 #include "utils.hpp"
 
 #define NUM_LANES 32
-#define NUM_WARPS 2
+#define NUM_WARPS 64
 
 // For simplicity, the CPU here is for now modelled as a 1x1 GPU
 Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
@@ -29,7 +29,7 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf, false);
+  p->add_stage<WritebackResume>(cu, rf);
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -67,7 +67,7 @@ Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf, true);
+  p->add_stage<WritebackResume>(cu, rf);
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));

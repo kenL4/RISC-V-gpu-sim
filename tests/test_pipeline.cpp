@@ -114,7 +114,7 @@ void test_writeback_latch() {
   DataMemory dm;
   CoalescingUnit cu(&dm);
   RegisterFile rf(32, 32);
-  WritebackResume stage(&cu, &rf, true);
+  WritebackResume stage(&cu, &rf);
 
   PipelineLatch input, output;
   input.updated = false;

@@ -9,6 +9,7 @@
 typedef struct execute_result {
   bool success;
   bool write_required;
+  bool counted;
 } execute_result;
 
 /*

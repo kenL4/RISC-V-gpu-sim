@@ -14,7 +14,7 @@ public:
   uint64_t get_dram_accs();
 
   void increment_gpu_cycles();
-  void increment_gpu_instrs();
+  void increment_gpu_instrs(size_t warp_size);
   void increment_dram_accs();
 
   uint64_t get_cpu_instrs();

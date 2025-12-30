@@ -11,7 +11,7 @@
  */
 class WritebackResume : public PipelineStage {
 public:
-  WritebackResume(CoalescingUnit *cu, RegisterFile *rf, bool is_gpu);
+  WritebackResume(CoalescingUnit *cu, RegisterFile *rf);
   void execute() override;
   bool is_active() override;
   ~WritebackResume() {};
@@ -19,5 +19,4 @@ public:
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
-  bool is_gpu;
 };

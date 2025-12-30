@@ -8,12 +8,6 @@ void CoalescingUnit::suspend_warp(Warp *warp) {
     int cached = rand() % 100;
     bool in_cache = cached < 75;
 
-    // We only fall through to DRAM if it is not cached
-    // and the warp is not already blocked (due to my per-thread execution)
-    if (!(in_cache || blocked_warps[warp] > 0)) {
-        GPUStatisticsManager::instance().increment_dram_accs();
-    }
-
     blocked_warps[warp] = in_cache ? L1_CACHE_LATENCY : DRAM_LATENCY;
 }
 
