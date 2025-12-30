@@ -7,6 +7,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    
+    env:
+      LLVM_VERSION: 20
+      CC: clang-20
+      CXX: clang++-20
 
     steps:
       - name: Checkout repository
@@ -15,13 +20,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-      
-      - name: Install latest LLVM
+          sudo apt-get install -y build-essential cmake
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
         run: |
-          sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+
+      - name: Verify Compiler Version
+        run: $CC --version
 
       - name: Build simulator
         run: make
