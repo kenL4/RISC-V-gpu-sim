@@ -1,7 +1,7 @@
 #include "utils.hpp"
 
 void debug_log(std::string message) {
-  if (!Config::instance().isDebug())
+  if (!Config::instance().isDebug() || Config::instance().isStatsOnly())
     return;
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);
@@ -12,7 +12,7 @@ void debug_log(std::string message) {
 }
 
 void log(std::string name, std::string message) {
-  if (!Config::instance().isDebug())
+  if (!Config::instance().isDebug() || Config::instance().isStatsOnly())
     return;
   debug_log("[" + name + "] " + message);
 }

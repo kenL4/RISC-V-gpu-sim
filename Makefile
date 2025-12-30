@@ -4,16 +4,16 @@ TEST_EXEC = unit_tests
 
 # Default target
 all: $(BUILD_DIR)/Makefile
-	@$(MAKE) -C $(BUILD_DIR)
+	@$(MAKE) --no-print-directory -C $(BUILD_DIR)
 
 # Ensure build directory exists and run CMake
 $(BUILD_DIR)/Makefile: CMakeLists.txt
 	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && cmake ..
+	@cd $(BUILD_DIR) && cmake .. > /dev/null
 
 # Build just the unit_tests target
 unit_tests: $(BUILD_DIR)/Makefile
-	@$(MAKE) -C $(BUILD_DIR) unit_tests
+	@$(MAKE) --no-print-directory -C $(BUILD_DIR) unit_tests
 
 # Build and run unit tests
 test: unit_tests

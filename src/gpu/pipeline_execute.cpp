@@ -123,7 +123,7 @@ execute_result ExecutionUnit::execute(Warp *warp,
     }
     res.success = false;
     res.counted = false;
-    std::cout << "[WARNING] Unknown instruction " << mnemonic << std::endl;
+    if (!Config::instance().isStatsOnly()) std::cout << "[WARNING] Unknown instruction " << mnemonic << std::endl;
   }
   return res;
 }
@@ -947,7 +947,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       } else {
         input_char = -1; // EOF
       }
-      std::cerr << "[Input] Returning " << input_char << std::endl;
+      if (!Config::instance().isStatsOnly()) std::cout << "[Input] Returning " << input_char << std::endl;
       rf->set_register(warp->warp_id, thread, rd_reg, input_char);
     } break;
     case 0x820: {

@@ -23,7 +23,7 @@ void HostGPUControl::launch_kernel() {
     scheduler->insert_warp(warp);
   }
   gpu_active = true;
-  std::cerr << "[HostGPUControl] Launched kernel with " +
+  if (!Config::instance().isStatsOnly()) std::cout << "[HostGPUControl] Launched kernel with " +
                    std::to_string(num_warps) + " warps"
             << std::endl;
   scheduler->set_active(true);

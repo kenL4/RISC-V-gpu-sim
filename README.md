@@ -14,33 +14,27 @@ Statically included dependencies: ```cxxopts, ELFIO```
 Recursively clone the repo:
 ```git clone --recursive https://github.com/kenL4/RISC-V-gpu-sim.git```
 
-To build the simulator:
+The simplest way to run and observe the stats for all included SIMTight example test kernels is just to run:
+```./run-samples.sh```
+
+If you want to run the simulator directly on a particular kernel, follow these instructions:
+
+1. Build the simulator:
 ```bash
 make
 ```
 This will automatically create the `build/` directory, configure with CMake, and build the project.
-Alternatively, you can build manually using CMake:
+
+2. Run the built simulator binary on a NoCL kernel:
 ```bash
-mkdir build && cd build
-cmake ..
-make
+# e.g.
+./build/RISCVGpuSim ./Samples/VecAdd/app.elf
 ```
 
-## Running Tests
+Note: You can just run the binary with no arguments to see what arguments and options are supported
+
+## Running Unit Tests
 To build and run the unit test suite:
 ```bash
 make test
-```
-
-## Running the Simulator
-To run an example binary on the simulator:
-```bash
-# 1. Build the example kernel (requires RISC-V compiler)
-cd examples/example1
-make all
-cd ../..
-
-# 2. Run the simulator
-# Usage: ./RISCVGpuSim <path_to_kernel_binary>
-build/RISCVGpuSim examples/example1/kernel
 ```

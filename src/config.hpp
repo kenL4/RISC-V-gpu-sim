@@ -29,9 +29,13 @@ public:
   void setCPUDebug(bool value) { cpuDebug = value; }
   bool isCPUDebug() { return cpuDebug; }
 
+  void setStatsOnly(bool value) { statsOnly = value; }
+  bool isStatsOnly() { return statsOnly; }
+
 private:
   bool debug = false;
   bool regDump = false;
   bool cpuDebug = false;
+  bool statsOnly = false;
   Config() = default;
 };

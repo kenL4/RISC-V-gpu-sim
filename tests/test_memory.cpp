@@ -1,4 +1,5 @@
 #include "test_memory.hpp"
+#include "config.hpp"
 #include "gpu/pipeline.hpp"
 #include "mem/mem_coalesce.hpp"
 #include "mem/mem_data.hpp"
@@ -98,9 +99,9 @@ void test_coalesce_latency() {
       break; // Safety break
   }
 
-  // Base latency (100) + 1 burst (4) = 104
-  // Allow small margin if logic changes slightly
-  assert(ticks >= 100);
+  // With cache miss: latency = SIM_DRAM_LATENCY + cache_misses (1)
+  // All addresses 0x2000-0x200C are in the same 64-byte cache line
+  assert(ticks >= static_cast<int>(SIM_DRAM_LATENCY));
 
   std::cout << "test_coalesce_latency passed!" << std::endl;
 }

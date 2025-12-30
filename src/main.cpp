@@ -98,11 +98,12 @@ int main(int argc, char *argv[]) {
                            "A software simulator for a RISC-V GPU");
 
   options.add_options()("filename", "Input filename",
-                        cxxopts::value<std::string>())(
-      "d,debug", "Turn on debugging logs")("c,cpu-debug",
-                                           "Turn on CPU debugging logs")(
-      "r,regdump", "Dump the register values after each writeback stage")(
-      "h,help", "Show help");
+                        cxxopts::value<std::string>())
+     ("d,debug", "Turn on debugging logs")
+     ("c,cpu-debug", "Turn on CPU debugging logs")
+     ("r,regdump", "Dump the register values after each writeback stage")
+     ("s,statsonly", "Do not print anything aside from the final stats")
+     ("h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);
@@ -115,6 +116,7 @@ int main(int argc, char *argv[]) {
   Config::instance().setDebug(result.count("debug") > 0);
   Config::instance().setCPUDebug(result.count("cpu-debug") > 0);
   Config::instance().setRegisterDump(result.count("regdump") > 0);
+  Config::instance().setStatsOnly(result.count("statsonly") > 0);
 
   std::string filename = result["filename"].as<std::string>();
 
@@ -178,32 +180,33 @@ int main(int argc, char *argv[]) {
   }
 
   std::string output = gpu_controller.get_buffer();
-  std::cerr << std::endl << "[Results]" << std::endl;
-  std::cerr << output;
+  if (!Config::instance().isStatsOnly()) std::cout << std::endl << "[Results]" << std::endl;
+  if (!Config::instance().isStatsOnly()) std::cout << output;
   uint64_t sum = 0;
   for (int i = 0; i < output.size(); i++) {
     if (output[i] == '1') {
       sum += 1;
     }
   }
-  std::cerr << ((sum == 0) ? "All passed!"
+  if (!Config::instance().isStatsOnly()) 
+    std::cout << ((sum == 0) ? "All passed!"
                            : std::to_string(NUM_LANES * NUM_WARPS - sum) +
-                                 " passed, " + std::to_string(sum) + " failed")
-            << std::endl;
+                              " passed, " + std::to_string(sum) + " failed")
+              << std::endl << std::endl;
 
-  std::cerr << std::endl << "[Summary]" << std::endl;
+  std::cout << "[Statistics]" << std::endl;
   uint64_t cycles = (GPUStatisticsManager::instance().get_gpu_cycles());
   uint64_t gpu_instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
   uint64_t cpu_instrs = (GPUStatisticsManager::instance().get_cpu_instrs());
   double ipc = ((double)gpu_instrs / (double)cycles);
   uint64_t gpu_dram_accs = (GPUStatisticsManager::instance().get_gpu_dram_accs());
   uint64_t cpu_dram_accs = (GPUStatisticsManager::instance().get_cpu_dram_accs());
-  std::cerr << "GPU Cycles: " << cycles << std::endl;
-  std::cerr << "GPU Instrs: " << gpu_instrs << std::endl;
-  std::cerr << "CPU Instrs: " << cpu_instrs << std::endl;
-  std::cerr << "IPC: " << ipc << std::endl;
-  std::cerr << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
-  std::cerr << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
+  std::cout << "GPU Cycles: " << cycles << std::endl;
+  std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
+  std::cout << "CPU Instrs: " << cpu_instrs << std::endl;
+  std::cout << "IPC: " << ipc << std::endl;
+  std::cout << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
+  std::cout << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
 
   delete cpu_pipeline;
   delete gpu_pipeline;
