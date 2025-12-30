@@ -9,9 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      LLVM_VERSION: 20
-      CC: clang-20
-      CXX: clang++-20
+      LLVM_VERSION: 21
+      CC: clang-21
+      CXX: clang++-21
 
     steps:
       - name: Checkout repository
@@ -33,7 +33,7 @@ jobs:
 
       - name: Build simulator
         env:
-            LLVM_DIR: /usr/lib/llvm-20/lib/cmake/llvm
+            LLVM_DIR: /usr/lib/llvm-21/lib/cmake/llvm
         run: make
 
       - name: Run unit tests
