@@ -21,8 +21,6 @@ void WarpScheduler::flush_new_warps() {
 }
 
 void WarpScheduler::execute() {
-  // Reset the tracking flag at the start of each cycle
-  warp_scheduled_this_cycle = false;
 
   // Flush new warps at the start so they're available for scheduling this cycle
   flush_new_warps();
@@ -61,8 +59,6 @@ void WarpScheduler::execute() {
     return;
   }
 
-  // A warp was successfully scheduled
-  warp_scheduled_this_cycle = true;
   log("Warp Scheduler",
       "Warp " + std::to_string(scheduled_warp->warp_id) + " scheduled to run");
 }

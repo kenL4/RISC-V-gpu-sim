@@ -177,16 +177,13 @@ int main(int argc, char *argv[]) {
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages()) {
 
+    if (gpu_pipeline->has_active_stages()) {
+      GPUStatisticsManager::instance().increment_gpu_cycles();
+    }
+
     cpu_pipeline->execute();
     cu.tick();
     gpu_pipeline->execute();
-
-    // Have to check GPU activity properly otherwise
-    // counts get messed up
-    if (gpu_scheduler->scheduled_warp_this_cycle() ||
-        gpu_writeback->made_progress_this_cycle()) {
-      GPUStatisticsManager::instance().increment_gpu_cycles();
-    }
   }
 
   std::string output = gpu_controller.get_buffer();
