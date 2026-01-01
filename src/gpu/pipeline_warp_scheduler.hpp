@@ -16,6 +16,10 @@ public:
   bool is_active() override;
   void set_active(bool active) { this->active = active; }
   void insert_warp(Warp *warp);
+
+  // Returns true if a warp was actually scheduled in the last execute() call
+  bool scheduled_warp_this_cycle() const { return warp_scheduled_this_cycle; }
+
   ~WarpScheduler();
 
 private:
@@ -24,6 +28,7 @@ private:
   std::queue<Warp *> warp_queue;
   std::queue<Warp *> new_warp_queue;
   bool active = true;
+  bool warp_scheduled_this_cycle = false;
 
   void flush_new_warps();
 };

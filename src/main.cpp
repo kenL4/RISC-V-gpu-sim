@@ -98,12 +98,12 @@ int main(int argc, char *argv[]) {
                            "A software simulator for a RISC-V GPU");
 
   options.add_options()("filename", "Input filename",
-                        cxxopts::value<std::string>())
-     ("d,debug", "Turn on debugging logs")
-     ("c,cpu-debug", "Turn on CPU debugging logs")
-     ("r,regdump", "Dump the register values after each writeback stage")
-     ("s,statsonly", "Do not print anything aside from the final stats")
-     ("h,help", "Show help");
+                        cxxopts::value<std::string>())(
+      "d,debug", "Turn on debugging logs")("c,cpu-debug",
+                                           "Turn on CPU debugging logs")(
+      "r,regdump", "Dump the register values after each writeback stage")(
+      "s,statsonly", "Do not print anything aside from the final stats")(
+      "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);
@@ -167,16 +167,26 @@ int main(int argc, char *argv[]) {
   gpu_controller.set_scheduler(
       std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0)));
 
+  // Get references to stages we need for cycle counting
+  std::shared_ptr<WarpScheduler> gpu_scheduler =
+      std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0));
+  std::shared_ptr<WritebackResume> gpu_writeback =
+      std::dynamic_pointer_cast<WritebackResume>(gpu_pipeline->get_stage(5));
+
   // Execute the threads
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages()) {
-    if (gpu_pipeline->has_active_stages()) {
-      GPUStatisticsManager::instance().increment_gpu_cycles();
-    }
 
     cpu_pipeline->execute();
     cu.tick();
     gpu_pipeline->execute();
+
+    // Have to check GPU activity properly otherwise
+    // counts get messed up
+    if (gpu_scheduler->scheduled_warp_this_cycle() ||
+        gpu_writeback->made_progress_this_cycle()) {
+      GPUStatisticsManager::instance().increment_gpu_cycles();
+    }
   }
 
   std::string output = gpu_controller.get_buffer();

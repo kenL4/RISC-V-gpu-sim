@@ -6,6 +6,8 @@ WritebackResume::WritebackResume(CoalescingUnit *cu, RegisterFile *rf)
 }
 
 void WritebackResume::execute() {
+  // Reset progress flag at start of cycle
+  progress_this_cycle = false;
 
   // Take the thread from execute unless not busy then
   // resume from suspended
@@ -19,7 +21,9 @@ void WritebackResume::execute() {
   }
 
   // At this point, we know an instructions has successfully
-  // executed OR it has been resumed
+  // executed OR it has been resumed - either way, progress was made
+  progress_this_cycle = true;
+
   if (!warp->is_cpu) {
     // GPUStatisticsManager::instance().increment_gpu_instrs(warp->size);
   } else {

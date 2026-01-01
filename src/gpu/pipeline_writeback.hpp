@@ -14,9 +14,14 @@ public:
   WritebackResume(CoalescingUnit *cu, RegisterFile *rf);
   void execute() override;
   bool is_active() override;
+
+  // Returns true if the writeback stage did actual work this cycle
+  bool made_progress_this_cycle() const { return progress_this_cycle; }
+
   ~WritebackResume() {};
 
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
+  bool progress_this_cycle = false;
 };
