@@ -4,17 +4,14 @@
 DataCache::DataCache() : lines(SIM_CACHE_NUM_LINES) {}
 
 uint64_t DataCache::get_tag(uint64_t addr) {
-  // Tag is the upper bits after removing line index and offset
   return addr >> (SIM_CACHE_LINE_SIZE_LOG + SIM_CACHE_NUM_LINES_LOG);
 }
 
 size_t DataCache::get_line_index(uint64_t addr) {
-  // Line index is the middle bits
   return (addr >> SIM_CACHE_LINE_SIZE_LOG) & (SIM_CACHE_NUM_LINES - 1);
 }
 
 size_t DataCache::get_line_offset(uint64_t addr) {
-  // Offset is the lower bits
   return addr & (SIM_CACHE_LINE_SIZE - 1);
 }
 
@@ -95,9 +92,8 @@ void DataCache::fetch_line(size_t index, uint64_t addr) {
   uint64_t tag = get_tag(addr);
   uint64_t base_addr = get_line_base_addr(tag, index);
 
-  // Load the entire cache line from backing memory
+  // Repeated one byte loads for the entire cache line from backing memory
   for (size_t i = 0; i < SIM_CACHE_LINE_SIZE; i++) {
-    // Use 1-byte loads to get individual bytes
     int64_t val = backing_memory->load(base_addr + i, 1);
     line.data[i] = static_cast<uint8_t>(val & 0xFF);
   }

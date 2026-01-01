@@ -98,12 +98,12 @@ int main(int argc, char *argv[]) {
                            "A software simulator for a RISC-V GPU");
 
   options.add_options()("filename", "Input filename",
-                        cxxopts::value<std::string>())(
-      "d,debug", "Turn on debugging logs")("c,cpu-debug",
-                                           "Turn on CPU debugging logs")(
-      "r,regdump", "Dump the register values after each writeback stage")(
-      "s,statsonly", "Do not print anything aside from the final stats")(
-      "h,help", "Show help");
+                        cxxopts::value<std::string>())
+     ("d,debug", "Turn on debugging logs")
+     ("c,cpu-debug", "Turn on CPU debugging logs")
+     ("r,regdump", "Dump the register values after each writeback stage")
+     ("s,statsonly", "Do not print anything aside from the final stats")
+     ("h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);

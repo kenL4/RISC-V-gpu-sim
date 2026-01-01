@@ -23,8 +23,4 @@ test: unit_tests
 clean:
 	@rm -rf $(BUILD_DIR)
 
-# Helper to run the main executable
-run: all
-	@cd $(BUILD_DIR) && ./$(EXEC)
-
 .PHONY: all unit_tests test clean run
