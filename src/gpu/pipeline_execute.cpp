@@ -107,13 +107,8 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = csrrw(warp, active_threads, &inst);
   } else if (mnemonic == "NOCLPUSH") {
     res.write_required = noclpush(warp, active_threads, &inst);
-    // NOCLPUSH aliases with Converge (uncounted). We cannot distinguish them (0
-    // operands). Logic in ExecuteSuspend will double-count NOCLPOP to account
-    // for the matching Push.
-    res.counted = false;
   } else if (mnemonic == "NOCLPOP") {
     res.write_required = noclpop(warp, active_threads, &inst);
-    res.counted = false;
   } else if (mnemonic == "CACHE_LINE_FLUSH") {
     res.write_required = cache_line_flush(warp, active_threads, &inst);
   } else {
@@ -123,7 +118,8 @@ execute_result ExecutionUnit::execute(Warp *warp,
     }
     res.success = false;
     res.counted = false;
-    if (!Config::instance().isStatsOnly()) std::cout << "[WARNING] Unknown instruction " << mnemonic << std::endl;
+    if (!Config::instance().isStatsOnly())
+      std::cout << "[WARNING] Unknown instruction " << mnemonic << std::endl;
   }
   return res;
 }
@@ -947,7 +943,8 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       } else {
         input_char = -1; // EOF
       }
-      if (!Config::instance().isStatsOnly()) std::cout << "[Input] Returning " << input_char << std::endl;
+      if (!Config::instance().isStatsOnly())
+        std::cout << "[Input] Returning " << input_char << std::endl;
       rf->set_register(warp->warp_id, thread, rd_reg, input_char);
     } break;
     case 0x820: {
