@@ -41,6 +41,8 @@ def read_my_trace(file):
         line = f.readline()
         parts = line.split(" ")
         data[kernel]["cpu_dram_accs"] = int(parts[2])
+
+        data[kernel]["gpu_ipc"] = float(data[kernel]["gpu_instrs"]) / data[kernel]["gpu_cycles"]
     return data
 
 def read_simtight_trace(file):
@@ -48,7 +50,6 @@ def read_simtight_trace(file):
     data = {}
     line = f.readline()
     while line:
-        print(line)
         parts = line.split(" ")
 
         if len(parts) == 0 or parts[0] != "Running":
@@ -69,7 +70,6 @@ def read_simtight_trace(file):
         parts = line.split(" ")
         
         while parts[0] != "Self":
-            print(parts[0])
             data[kernel]["gpu_cycles"] += int(parts[1], 16)
 
             line = f.readline()
@@ -91,6 +91,8 @@ def read_simtight_trace(file):
             # Move to the next line
             line = f.readline()
             parts = line.split(" ")
+
+        data[kernel]["gpu_ipc"] = float(data[kernel]["gpu_instrs"]) / data[kernel]["gpu_cycles"]
     return data
 
 def plot_gpu_instrs(data, simtight):
@@ -153,6 +155,26 @@ def plot_dram_accs(data, simtight):
 
     plt.show()
 
+def plot_ipc(data, simtight):
+    gpu_ipc = [data[name]["gpu_ipc"] for name in data.keys()]
+    simtight_gpu_ipc = [simtight[name]["gpu_ipc"] for name in simtight.keys()]
+    
+    index = np.arange(len(gpu_ipc))
+    bar_width = 0.35
+
+    fig, ax = plt.subplots()
+    mine = ax.bar(index, gpu_ipc, bar_width, label="Mine")
+    baseline = ax.bar(index + bar_width, simtight_gpu_ipc, bar_width, label="SIMTight")
+
+    ax.set_xlabel('Kernel')
+    ax.set_ylabel('IPC')
+    ax.set_title('GPU IPC by GPU, Kernel')
+    ax.set_xticks(index + bar_width / 2)
+    ax.set_xticklabels(data.keys())
+    ax.legend()
+
+    plt.show()
+
 def plot_gpu_all(data, simtight):
     gpu_instrs = [data[name]["gpu_instrs"] for name in data.keys()]
     simtight_gpu_instrs = [simtight[name]["gpu_instrs"] for name in simtight.keys()]
@@ -202,6 +224,22 @@ def plot_gpu_all(data, simtight):
     ax[0][0].set_xticks(index + bar_width / 2)
     ax[0][0].set_xticklabels(data.keys())
     ax[0][0].legend()
+
+    gpu_ipc = [data[name]["gpu_ipc"] for name in data.keys()]
+    simtight_gpu_ipc = [simtight[name]["gpu_ipc"] for name in simtight.keys()]
+    
+    index = np.arange(len(gpu_ipc))
+    bar_width = 0.35
+
+    mine = ax[1][1].bar(index, gpu_ipc, bar_width, label="Mine")
+    baseline = ax[1][1].bar(index + bar_width, simtight_gpu_ipc, bar_width, label="SIMTight")
+
+    ax[1][1].set_xlabel('Kernel')
+    ax[1][1].set_ylabel('IPC')
+    ax[1][1].set_title('GPU IPC by GPU, Kernel')
+    ax[1][1].set_xticks(index + bar_width / 2)
+    ax[1][1].set_xticklabels(data.keys())
+    ax[1][1].legend()
 
     plt.show()
 
