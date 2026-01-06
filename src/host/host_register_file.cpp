@@ -1,7 +1,10 @@
 #include "host_register_file.hpp"
 
 HostRegisterFile::HostRegisterFile(RegisterFile *rf, int num_registers)
-    : RegisterFile(0, 0), rf(rf), num_registers(num_registers) {}
+    : RegisterFile(0, 0), rf(rf), num_registers(num_registers) {
+    // For simulation purposes, we set SP(x2) to the STACK_BASE - 8
+    rf->set_register(0, 0, llvm::RISCV::X2, SIM_CPU_INITIAL_SP);
+}
 
 /*
  * This wrapper ignores the warp_id and thread arguments

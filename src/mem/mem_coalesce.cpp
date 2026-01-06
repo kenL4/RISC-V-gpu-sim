@@ -18,6 +18,10 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
     uint64_t end_block = (addr + access_size - 1) / SIM_CACHE_LINE_SIZE;
 
     for (uint64_t block = start_block; block <= end_block; block++) {
+      // We don't want to count the SRAM requests (to be consistent with SIMTight)
+      uint64_t block_32 = 0xFFFFFFFF & block;
+      if (SIM_SHARED_SRAM_BASE <= block_32 && block_32 < SIM_SIMT_STACK_BASE) continue;
+
       active_blocks.insert(block);
     }
   }
@@ -59,10 +63,6 @@ void CoalescingUnit::suspend_warp(Warp *warp,
   // Calculate number of coalesced DRAM bursts (unique cache-line-sized blocks)
   // This is the number of DRAM transactions that would be issued
   int dram_bursts = calculate_bursts(addrs, access_size);
-
-  // Count ALL DRAM accesses (matching SIMTight's behavior)
-  // SIMTight counts every load/store that goes through the DRAM interface,
-  // not just cache misses. This represents the actual DRAM traffic.
   for (int i = 0; i < dram_bursts; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -71,7 +71,7 @@ void CoalescingUnit::suspend_warp(Warp *warp,
     }
   }
 
-  // Still use cache for latency modeling
+  // Still use cache for latency modeling (not sure if this is correct)
   int cache_misses = calculate_cache_misses(addrs, access_size, is_store);
 
   // Latency model:
