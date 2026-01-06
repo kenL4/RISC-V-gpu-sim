@@ -177,13 +177,16 @@ int main(int argc, char *argv[]) {
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages()) {
 
-    if (gpu_pipeline->has_active_stages()) {
-      GPUStatisticsManager::instance().increment_gpu_cycles();
-    }
-
     cpu_pipeline->execute();
     cu.tick();
     gpu_pipeline->execute();
+
+    // The most accurate model of SIMTight's pipeline latency modelling
+    // that I've found so far is to count the number of times
+    // the scheduler successfully issued a new wrap
+    if (gpu_scheduler->did_issue_warp()) {
+      GPUStatisticsManager::instance().increment_gpu_cycles();
+    }
   }
 
   std::string output = gpu_controller.get_buffer();
