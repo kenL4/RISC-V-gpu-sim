@@ -33,5 +33,6 @@ private:
                     size_t access_size, bool is_store);
   int calculate_cache_misses(const std::vector<uint64_t> &addrs,
                              size_t access_size, bool is_store);
-  int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size);
+  int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size,
+                       bool is_store);
 };

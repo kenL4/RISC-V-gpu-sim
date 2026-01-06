@@ -1,4 +1,5 @@
 #include "mem_coalesce.hpp"
+#include <algorithm>
 
 // Use centralized config values from config.hpp (included via data_cache.hpp)
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)
@@ -11,8 +12,8 @@ CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
 }
 
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
-                                     size_t access_size) {
-  // SIMTight coalescing strategy implementation
+                                     size_t access_size, bool is_store) {
+  // SIMTight coalescing strategy implementation with iterative processing
   // SIMTight has 32 lanes and 64-byte (512-bit) DRAM beats
   constexpr size_t NUM_LANES = 32;
   constexpr size_t LOG_LANES = 5;
@@ -21,151 +22,124 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
     return 0;
   }
 
-  // Filter out SRAM requests first
-  std::vector<uint64_t> dram_addrs;
-  for (uint64_t addr : addrs) {
+  // Build list of (lane_id, addr) pairs for DRAM requests only
+  std::vector<std::pair<size_t, uint64_t>> pending;
+  for (size_t lane = 0; lane < addrs.size(); lane++) {
+    uint64_t addr = addrs[lane];
     uint64_t addr_32 = 0xFFFFFFFF & addr;
     // Skip SRAM region (shared SRAM)
     if (SIM_SHARED_SRAM_BASE <= addr_32 && addr_32 < SIM_SIMT_STACK_BASE) {
       continue;
     }
-    dram_addrs.push_back(addr);
+    pending.push_back({lane, addr});
   }
 
-  if (dram_addrs.empty()) {
+  if (pending.empty()) {
     return 0;
   }
 
-  // Strategy 1: SameAddress - all lanes access the same address
-  // This is the most efficient: 1 DRAM access serves all lanes
-  bool all_same_addr = true;
-  uint64_t first_addr = dram_addrs[0];
-  for (size_t i = 1; i < dram_addrs.size(); i++) {
-    if (dram_addrs[i] != first_addr) {
-      all_same_addr = false;
-      break;
-    }
-  }
-  if (all_same_addr) {
-    // One DRAM access serves all lanes
-    return 1;
-  }
+  int total_dram_accesses = 0;
 
-  // Strategy 2: SameBlock - lanes access same block with lane-ID-aligned
-  // addresses In SIMTight, this works when:
-  // - Upper bits (block address) are the same for all lanes
-  // - Lower bits match the lane ID pattern
-  //
-  // For word accesses (4 bytes), the pattern is:
-  //   addr[1:0] are same across all lanes (sub-word offset)
-  //   addr[LOG_LANES+1:2] equals lane ID
-  //
-  // When SameBlock succeeds:
-  // - Byte/Half accesses: 1 beat
-  // - Word accesses: 2 beats (since 32 lanes * 4 bytes = 128 bytes > 64 byte
-  // beat)
+  // Iterative coalescing: process lanes until all are served
+  while (!pending.empty()) {
+    // Pick the first pending lane as the leader (matching SIMTight)
+    size_t leader_lane = pending[0].first;
+    uint64_t leader_addr = pending[0].second;
 
-  // Check if all addresses are in the same 64*NUM_LANES byte block
-  // (For SameBlock to work, upper bits must match)
-  uint64_t block_addr = first_addr >> (LOG_LANES + 2); // Upper bits above lane
-                                                       // addressing
-  bool same_block = true;
-  for (const auto &addr : dram_addrs) {
-    if ((addr >> (LOG_LANES + 2)) != block_addr) {
-      same_block = false;
-      break;
-    }
-  }
+    // Compute coalescing masks based on leader
+    std::vector<size_t> same_block_lanes;
+    std::vector<size_t> same_addr_lanes;
 
-  if (same_block) {
-    // Check for lane-ID-aligned pattern based on access size
-    bool is_word_access = (access_size >= 4);
+    // SameBlock and SameAddress are computed relative to leader
+    uint64_t leader_block = leader_addr >> (LOG_LANES + 2);
+    // For SameAddress: lower LOG_LANES+2 bits must match
+    uint64_t leader_low_bits = leader_addr & ((1ULL << (LOG_LANES + 2)) - 1);
 
-    if (is_word_access) {
-      // Word mode: addr[1:0] same, addr[LOG_LANES+1:2] = lane_id
-      // This means we can pack 16 words per beat (64 bytes / 4 bytes)
-      // With 32 lanes, we need 2 beats
-      uint64_t sub_word_bits = first_addr & 0x3; // bits [1:0]
-      bool valid_pattern = true;
+    for (const auto &[lane, addr] : pending) {
+      // Check if in same block (required for BOTH SameAddress and SameBlock)
+      uint64_t block = addr >> (LOG_LANES + 2);
+      bool in_same_block = (block == leader_block);
 
-      for (size_t lane = 0; lane < dram_addrs.size(); lane++) {
-        uint64_t addr = dram_addrs[lane];
-        // Check sub-word bits are consistent
-        if ((addr & 0x3) != sub_word_bits) {
-          valid_pattern = false;
-          break;
-        }
-        // Check lane ID pattern: bits [LOG_LANES+1:2] should equal lane ID
-        uint64_t lane_bits = (addr >> 2) & (NUM_LANES - 1);
-        if (lane_bits != lane) {
-          valid_pattern = false;
-          break;
-        }
+      // Check SameAddress: sameBlock AND lower LOG_LANES+2 bits match
+      // In SIMTight: sameAddr = sameBlock && (a1[6:0] == a2[6:0])
+      uint64_t low_bits = addr & ((1ULL << (LOG_LANES + 2)) - 1);
+      if (in_same_block && low_bits == leader_low_bits) {
+        same_addr_lanes.push_back(lane);
       }
 
-      if (valid_pattern) {
-        // Word mode SameBlock: 2 beats
-        return 2;
-      }
-    } else {
-      // Byte/Half mode checking
-      bool is_half_access = (access_size == 2);
+      // Check SameBlock based on access size
+      if (in_same_block) {
+        bool matches = false;
 
-      if (is_half_access) {
-        // Half mode: addr[LOG_LANES:1] = lane_id, addr[LOG_LANES+1] same
-        uint64_t upper_bit = (first_addr >> (LOG_LANES + 1)) & 0x1;
-        bool valid_pattern = true;
-
-        for (size_t lane = 0; lane < dram_addrs.size(); lane++) {
-          uint64_t addr = dram_addrs[lane];
-          if (((addr >> (LOG_LANES + 1)) & 0x1) != upper_bit) {
-            valid_pattern = false;
-            break;
+        if (access_size >= 4) {
+          // Word mode: addr[1:0] must match leader, addr[LOG_LANES+1:2] must
+          // equal lane_id
+          uint64_t sub_word = addr & 0x3;
+          uint64_t leader_sub_word = leader_addr & 0x3;
+          uint64_t lane_bits = (addr >> 2) & (NUM_LANES - 1);
+          if (sub_word == leader_sub_word && lane_bits == lane) {
+            matches = true;
           }
+        } else if (access_size == 2) {
+          // Half mode: addr[LOG_LANES:1] must equal lane_id, addr[LOG_LANES+1]
+          // must match leader
+          uint64_t upper_bit = (addr >> (LOG_LANES + 1)) & 0x1;
+          uint64_t leader_upper = (leader_addr >> (LOG_LANES + 1)) & 0x1;
           uint64_t lane_bits = (addr >> 1) & (NUM_LANES - 1);
-          if (lane_bits != lane) {
-            valid_pattern = false;
-            break;
+          if (upper_bit == leader_upper && lane_bits == lane) {
+            matches = true;
           }
-        }
-
-        if (valid_pattern) {
-          return 1;
-        }
-      } else {
-        // Byte mode: addr[LOG_LANES-1:0] = lane_id, addr[LOG_LANES+1:LOG_LANES]
-        // same
-        uint64_t upper_bits = (first_addr >> LOG_LANES) & 0x3;
-        bool valid_pattern = true;
-
-        for (size_t lane = 0; lane < dram_addrs.size(); lane++) {
-          uint64_t addr = dram_addrs[lane];
-          if (((addr >> LOG_LANES) & 0x3) != upper_bits) {
-            valid_pattern = false;
-            break;
-          }
+        } else {
+          // Byte mode: addr[LOG_LANES-1:0] must equal lane_id,
+          // addr[LOG_LANES+1:LOG_LANES] must match leader
+          uint64_t upper_bits = (addr >> LOG_LANES) & 0x3;
+          uint64_t leader_upper = (leader_addr >> LOG_LANES) & 0x3;
           uint64_t lane_bits = addr & (NUM_LANES - 1);
-          if (lane_bits != lane) {
-            valid_pattern = false;
-            break;
+          if (upper_bits == leader_upper && lane_bits == lane) {
+            matches = true;
           }
         }
 
-        if (valid_pattern) {
-          return 1;
+        if (matches) {
+          same_block_lanes.push_back(lane);
         }
       }
     }
+
+    // Choose strategy: use SameBlock if it satisfies leader AND at least one
+    // other lane
+    bool use_same_block =
+        (same_block_lanes.size() > 1) &&
+        (std::find(same_block_lanes.begin(), same_block_lanes.end(),
+                   leader_lane) != same_block_lanes.end());
+
+    std::vector<size_t> *served_lanes;
+    int bursts_for_this_access;
+
+    if (use_same_block) {
+      served_lanes = &same_block_lanes;
+      // Word accesses need 2 beats, byte/half need 1
+      bursts_for_this_access = (access_size >= 4) ? 2 : 1;
+    } else {
+      // Use SameAddress strategy - always 1 transaction
+      served_lanes = &same_addr_lanes;
+      bursts_for_this_access = 1;
+    }
+
+    total_dram_accesses += bursts_for_this_access;
+
+    // Remove served lanes from pending
+    std::set<size_t> served_set(served_lanes->begin(), served_lanes->end());
+    std::vector<std::pair<size_t, uint64_t>> remaining;
+    for (const auto &p : pending) {
+      if (served_set.find(p.first) == served_set.end()) {
+        remaining.push_back(p);
+      }
+    }
+    pending = std::move(remaining);
   }
 
-  // Fallback: Neither SameAddress nor SameBlock applies fully
-  // SIMTight uses SameAddress as fallback, grouping lanes by address
-  // Each unique address needs one DRAM access
-  std::set<uint64_t> unique_addrs;
-  for (uint64_t addr : dram_addrs) {
-    unique_addrs.insert(addr);
-  }
-  return unique_addrs.size();
+  return total_dram_accesses;
 }
 
 int CoalescingUnit::calculate_cache_misses(const std::vector<uint64_t> &addrs,
@@ -202,7 +176,7 @@ void CoalescingUnit::suspend_warp(Warp *warp,
 
   // Calculate number of coalesced DRAM bursts (unique cache-line-sized blocks)
   // This is the number of DRAM transactions that would be issued
-  int dram_bursts = calculate_bursts(addrs, access_size);
+  int dram_bursts = calculate_bursts(addrs, access_size, is_store);
   for (int i = 0; i < dram_bursts; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();

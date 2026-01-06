@@ -48,6 +48,7 @@ def read_simtight_trace(file):
     data = {}
     line = f.readline()
     while line:
+        print(line)
         parts = line.split(" ")
 
         if len(parts) == 0 or parts[0] != "Running":
@@ -55,27 +56,41 @@ def read_simtight_trace(file):
             continue
             
         kernel = parts[2].strip()
-        data[kernel] = {}
+        if kernel not in data:
+            data[kernel] = {
+                "gpu_cycles": 0,
+                "gpu_instrs": 0,
+                "gpu_susps": 0,
+                "gpu_retries": 0,
+                "gpu_dram_accs": 0,
+            }
         
         line = f.readline()
         parts = line.split(" ")
-        data[kernel]["gpu_cycles"] = int(parts[1], 16)
+        
+        while parts[0] != "Self":
+            print(parts[0])
+            data[kernel]["gpu_cycles"] += int(parts[1], 16)
 
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_instrs"] = int(parts[1], 16)
+            line = f.readline()
+            parts = line.split(" ")
+            data[kernel]["gpu_instrs"] += int(parts[1], 16)
 
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_susps"] = int(parts[1], 16)
+            line = f.readline()
+            parts = line.split(" ")
+            data[kernel]["gpu_susps"] += int(parts[1], 16)
 
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_retries"] = int(parts[1], 16)
+            line = f.readline()
+            parts = line.split(" ")
+            data[kernel]["gpu_retries"] += int(parts[1], 16)
 
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_dram_accs"] = int(parts[1], 16)
+            line = f.readline()
+            parts = line.split(" ")
+            data[kernel]["gpu_dram_accs"] += int(parts[1], 16)
+
+            # Move to the next line
+            line = f.readline()
+            parts = line.split(" ")
     return data
 
 def plot_gpu_instrs(data, simtight):
