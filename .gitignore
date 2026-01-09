@@ -10,5 +10,8 @@ cmake_install.cmake
 # Clangd
 .cache/
 
+# Python
+**/__pycache__/
+
 # Debug traces
 trace*.log
