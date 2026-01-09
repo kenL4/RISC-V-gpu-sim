@@ -14,4 +14,4 @@ cmake_install.cmake
 **/__pycache__/
 
 # Debug traces
-trace*.log
+# trace*.log

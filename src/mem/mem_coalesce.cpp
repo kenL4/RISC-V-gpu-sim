@@ -1,14 +1,13 @@
 #include "mem_coalesce.hpp"
+#include "config.hpp"
 #include <algorithm>
 
-// Use centralized config values from config.hpp (included via data_cache.hpp)
+// Use centralized config values from config.hpp
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)
-// SIM_CACHE_HIT_LATENCY = 2
-// SIM_CACHE_LINE_SIZE = 64 (DRAM beat size)
+// DRAM_BEAT_BYTES = 64 (DRAM beat size)
 
 CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
     : scratchpad_mem(scratchpad_mem) {
-  cache.set_backing_memory(scratchpad_mem);
 }
 
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
@@ -142,32 +141,6 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
   return total_dram_accesses;
 }
 
-int CoalescingUnit::calculate_cache_misses(const std::vector<uint64_t> &addrs,
-                                           size_t access_size, bool is_store) {
-  int misses = 0;
-  std::set<uint64_t> checked_lines;
-
-  for (uint64_t addr : addrs) {
-    // Check each cache line this access touches
-    uint64_t start_line = addr / SIM_CACHE_LINE_SIZE;
-    uint64_t end_line = (addr + access_size - 1) / SIM_CACHE_LINE_SIZE;
-
-    for (uint64_t line = start_line; line <= end_line; line++) {
-      // Only count each unique cache line once per coalesced access
-      if (checked_lines.find(line) != checked_lines.end()) {
-        continue;
-      }
-      checked_lines.insert(line);
-
-      uint64_t line_addr = line * SIM_CACHE_LINE_SIZE;
-      // access() returns true on hit, false on miss
-      if (!cache.access(line_addr, is_store)) {
-        misses++;
-      }
-    }
-  }
-  return misses;
-}
 
 void CoalescingUnit::suspend_warp(Warp *warp,
                                   const std::vector<uint64_t> &addrs,
@@ -185,19 +158,21 @@ void CoalescingUnit::suspend_warp(Warp *warp,
     }
   }
 
-  // Still use cache for latency modeling (not sure if this is correct)
-  int cache_misses = calculate_cache_misses(addrs, access_size, is_store);
-
-  // Latency model:
-  // - Cache hits: fast (CACHE_HIT_LATENCY per hit)
-  // - Cache misses: slow (DRAM_LATENCY + DRAM_BURST_LATENCY per miss)
+  // Latency model (matching SIMTight - no cache, direct DRAM access):
+  // Each DRAM transaction has SIM_DRAM_LATENCY cycles of latency
+  // Multiple transactions are pipelined, so total latency = base latency + additional bursts
+  // For simplicity, use: SIM_DRAM_LATENCY + (bursts - 1) if bursts > 0
+  // This models pipelined DRAM access where first access has full latency, 
+  // subsequent ones are pipelined with minimal additional latency
   int latency;
-  if (cache_misses > 0) {
-    // On any miss, we pay DRAM latency plus burst latency per miss
-    latency = SIM_DRAM_LATENCY + cache_misses;
+  if (dram_bursts == 0) {
+    // If no DRAM accesses (e.g., all accesses to SRAM), use minimal latency
+    latency = 1;
+  } else if (dram_bursts == 1) {
+    latency = SIM_DRAM_LATENCY;
   } else {
-    // All hits - just cache latency
-    latency = SIM_CACHE_HIT_LATENCY;
+    // Multiple bursts: first has full latency, additional ones add 1 cycle each (pipelined)
+    latency = SIM_DRAM_LATENCY + (dram_bursts - 1);
   }
 
   blocked_warps[warp] = latency;
@@ -209,18 +184,9 @@ std::vector<int> CoalescingUnit::load(Warp *warp,
   suspend_warp(warp, addrs, bytes, false);
   std::vector<int> results;
 
-  // Read from cache (all lines are now guaranteed to be present)
+  // Read directly from backing memory (no cache)
   for (uint64_t addr : addrs) {
-    int64_t value = 0;
-    for (size_t i = 0; i < bytes; i++) {
-      uint8_t byte = cache.load_byte(addr + i);
-      value |= (static_cast<int64_t>(byte) << (8 * i));
-    }
-    // Sign extend if needed
-    if (bytes < 8) {
-      int shift = 64 - (bytes * 8);
-      value = (value << shift) >> shift;
-    }
+    int64_t value = scratchpad_mem->load(addr, bytes);
     results.push_back(static_cast<int>(value));
   }
   return results;
@@ -230,13 +196,11 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
                            size_t bytes, const std::vector<int> &vals) {
   suspend_warp(warp, addrs, bytes, true);
 
-  // Write to cache
+  // Write directly to backing memory (no cache)
   for (size_t i = 0; i < addrs.size(); i++) {
     uint64_t addr = addrs[i];
     uint64_t val = static_cast<uint64_t>(vals[i]);
-    for (size_t j = 0; j < bytes; j++) {
-      cache.store_byte(addr + j, (val >> (8 * j)) & 0xFF);
-    }
+    scratchpad_mem->store(addr, bytes, val);
   }
 }
 

@@ -1,0 +1,108 @@
+Running kernel: Samples/VecAdd
+Cycles: 00001904
+Instrs: 00026918
+Susps: 00000000
+Retries: 000003be
+DRAMAccs: 00000874
+Self test: PASSED
+Running kernel: Samples/Histogram
+Cycles: 00001c2a
+Instrs: 0002c8c8
+Susps: 00000000
+Retries: 000003e9
+DRAMAccs: 0000082e
+Self test: PASSED
+Running kernel: Samples/Reduce
+Cycles: 000036fe
+Instrs: 0005cdee
+Susps: 00000000
+Retries: 000003db
+DRAMAccs: 000006fd
+Self test: PASSED
+Running kernel: Samples/Scan
+Cycles: 000089d2
+Instrs: 000fbfe4
+Susps: 00000000
+Retries: 00000630
+DRAMAccs: 00000b00
+Self test: PASSED
+Running kernel: Samples/Transpose
+Cycles: 00004844
+Instrs: 00080fe0
+Susps: 00000000
+Retries: 00000595
+DRAMAccs: 00001940
+Self test: PASSED
+Running kernel: Samples/MatVecMul
+Cycles: 00004396
+Instrs: 00068740
+Susps: 00000000
+Retries: 00000560
+DRAMAccs: 00001700
+Self test: PASSED
+Running kernel: Samples/MatMul
+Cycles: 0001302b
+Instrs: 0023dfa0
+Susps: 00000000
+Retries: 00000c31
+DRAMAccs: 00002100
+Self test: PASSED
+Running kernel: Samples/BitonicSortSmall
+Cycles: 0001d77b
+Instrs: 002eeb40
+Susps: 00000000
+Retries: 00002149
+DRAMAccs: 00002740
+Self test: PASSED
+Running kernel: Samples/BitonicSortLarge
+Cycles: 00058247
+Instrs: 007c77d8
+Susps: 00000000
+Retries: 0000e325
+DRAMAccs: 00002400
+Cycles: 00003249
+Instrs: 0004b82b
+Susps: 00000000
+Retries: 0000085b
+DRAMAccs: 00001540
+Cycles: 0000f877
+Instrs: 00179a90
+Susps: 00000000
+Retries: 00002251
+DRAMAccs: 00002400
+Self test: PASSED
+Running kernel: Samples/SparseMatVecMul
+Cycles: 000040f9
+Instrs: 000259e0
+Susps: 00000000
+Retries: 00000509
+DRAMAccs: 00000fdf
+Self test: PASSED
+Running kernel: InHouse/BlockedStencil
+Cycles: 00004420
+Instrs: 0006c360
+Susps: 00000000
+Retries: 00000824
+DRAMAccs: 00001640
+Self test: PASSED
+Running kernel: InHouse/StripedStencil
+Cycles: 00003e05
+Instrs: 000696a0
+Susps: 00000000
+Retries: 00000616
+DRAMAccs: 000018f8
+Self test: PASSED
+Running kernel: InHouse/VecGCD
+Cycles: 00002d47
+Instrs: 000206fb
+Susps: 00000000
+Retries: 000003ac
+DRAMAccs: 00000658
+Self test: PASSED
+Running kernel: InHouse/MotionEst
+Cycles: 0000a3d7
+Instrs: 000da0dc
+Susps: 00000000
+Retries: 000012d6
+DRAMAccs: 00002fa8
+Self test: PASSED

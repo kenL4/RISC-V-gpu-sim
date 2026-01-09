@@ -99,8 +99,9 @@ void test_coalesce_latency() {
       break; // Safety break
   }
 
-  // With cache miss: latency = SIM_DRAM_LATENCY + cache_misses (1)
-  // All addresses 0x2000-0x200C are in the same 64-byte cache line
+  // Without cache: latency = SIM_DRAM_LATENCY + (bursts - 1) for pipelined access
+  // All addresses 0x2000-0x200C are in the same block (coalesced into 2 bursts for word access in SameBlock mode)
+  // Expected latency = SIM_DRAM_LATENCY + 1 (for 2 bursts: first has full latency, second is pipelined)
   assert(ticks >= static_cast<int>(SIM_DRAM_LATENCY));
 
   std::cout << "test_coalesce_latency passed!" << std::endl;

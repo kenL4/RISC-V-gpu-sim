@@ -5,12 +5,7 @@
 // GPU Simulator Configuration - Copied from SIMTight defaults in Config.h
 constexpr size_t DRAM_BEAT_BYTES = 64;
 constexpr size_t DRAM_BEAT_LOG_BYTES = 6;
-constexpr size_t SIM_CACHE_LINE_SIZE = DRAM_BEAT_BYTES;
-constexpr size_t SIM_CACHE_LINE_SIZE_LOG = DRAM_BEAT_LOG_BYTES;
-constexpr size_t SIM_CACHE_NUM_LINES = 512;
-constexpr size_t SIM_CACHE_NUM_LINES_LOG = 9;
 constexpr size_t SIM_DRAM_LATENCY = 30;
-constexpr size_t SIM_CACHE_HIT_LATENCY = 2;
 constexpr size_t SIM_SHARED_SRAM_BASE = 0xBFFF0000;
 constexpr size_t SIM_SIMT_STACK_BASE = 0xC0000000;
 constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spilling rn
