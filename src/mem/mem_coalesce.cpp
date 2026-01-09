@@ -206,6 +206,15 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
 
 bool CoalescingUnit::is_busy() { return !blocked_warps.empty(); }
 
+bool CoalescingUnit::is_busy_for_pipeline(bool is_cpu_pipeline) {
+  for (auto &[key, val] : blocked_warps) {
+    if (key->is_cpu == is_cpu_pipeline) {
+      return true;
+    }
+  }
+  return false;
+}
+
 Warp *CoalescingUnit::get_resumable_warp() {
   Warp *resumable_warp = nullptr;
 
@@ -221,6 +230,28 @@ Warp *CoalescingUnit::get_resumable_warp() {
 
   blocked_warps.erase(resumable_warp);
   return resumable_warp;
+}
+
+Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
+  Warp *resumable_warp = nullptr;
+
+  for (auto &[key, val] : blocked_warps) {
+    if (val == 0 && key->is_cpu == is_cpu_pipeline) {
+      resumable_warp = key;
+      break;
+    }
+  }
+
+  if (resumable_warp == nullptr)
+    return nullptr;
+
+  blocked_warps.erase(resumable_warp);
+  return resumable_warp;
+}
+
+void CoalescingUnit::suspend_warp_latency(Warp *warp, size_t latency) {
+  warp->suspended = true;
+  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::tick() {

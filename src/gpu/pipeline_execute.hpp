@@ -1,4 +1,5 @@
 #include "disassembler/llvm_disasm.hpp"
+#include "functional_units.hpp"
 #include "host/host_gpu_control.hpp"
 #include "mem/mem_coalesce.hpp"
 #include "pipeline.hpp"
@@ -29,12 +30,18 @@ public:
     if (debug_enabled)
       ::log(name, message);
   }
+  
+  // Access functional units for ticking and resuming
+  MulUnit &get_mul_unit() { return mul_unit; }
+  DivUnit &get_div_unit() { return div_unit; }
 
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
   LLVMDisassembler *disasm;
   HostGPUControl *gpu_controller;
+  MulUnit mul_unit;
+  DivUnit div_unit;
   bool debug_enabled = true;
   bool add(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool addi(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
@@ -76,6 +83,8 @@ private:
   bool sltu(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool remu(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool divu(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
+  bool div_(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
+  bool rem_(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool fence(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool ecall(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool ebreak(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
@@ -107,6 +116,7 @@ public:
     eu->set_debug(enabled);
   }
   bool is_active() override;
+  ExecutionUnit *get_execution_unit() { return eu; }
   ~ExecuteSuspend();
 
 private:

@@ -1,6 +1,7 @@
 #include "pipeline_execute.hpp"
 #include "../disassembler/llvm_disasm.hpp"
 #include "../stats/stats.hpp"
+#include "../config.hpp"
 
 // In RISC-V, Word is always 32-bit (4 bytes)
 #define WORD_SIZE 4
@@ -97,6 +98,10 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = remu(warp, active_threads, &inst);
   } else if (mnemonic == "DIVU") {
     res.write_required = divu(warp, active_threads, &inst);
+  } else if (mnemonic == "DIV") {
+    res.write_required = div_(warp, active_threads, &inst);
+  } else if (mnemonic == "REM") {
+    res.write_required = rem_(warp, active_threads, &inst);
   } else if (mnemonic == "FENCE") {
     res.write_required = fence(warp, active_threads, &inst);
   } else if (mnemonic == "ECALL") {
@@ -172,17 +177,30 @@ bool ExecutionUnit::sub(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::mul(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
+  
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs1_reg = in->getOperand(1).getReg();
+  unsigned int rs2_reg = in->getOperand(2).getReg();
+  
+  // Collect register values for all active threads
+  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 * rs2);
-
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+  }
+  
+  // Issue to multiplier unit (will suspend warp)
+  if (!mul_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd)) {
+    return false;  // Unit is busy, need to retry
+  }
+  
+  // Advance PC (warp is suspended, will resume when operation completes)
+  for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
-  return active_threads.size() > 0;
+  
+  // Don't write yet - will write when operation completes
+  return false;  // write_required = false, we'll handle writeback on resume
 }
 bool ExecutionUnit::and_(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
@@ -406,9 +424,14 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
 
   std::vector<int> results = cu->load(warp, addresses, WORD_SIZE);
 
+  // Write results immediately (cu->load() returns results even if warp is suspended)
   for (size_t i = 0; i < results.size(); i++) {
     rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-    warp->pc[valid_threads[i]] += 4;
+  }
+
+  // Advance PC before returning (warp may be suspended, but PC should advance)
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
   }
 
   return !warp->suspended;
@@ -432,9 +455,14 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
 
   std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
 
+  // Write results immediately
   for (size_t i = 0; i < results.size(); i++) {
     rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-    warp->pc[valid_threads[i]] += 4;
+  }
+
+  // Advance PC before returning
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
   }
 
   return !warp->suspended;
@@ -458,10 +486,15 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
 
   std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
 
+  // Write results immediately
   for (size_t i = 0; i < results.size(); i++) {
     rf->set_register(warp->warp_id, valid_threads[i], rd,
                      static_cast<uint64_t>(results[i]));
-    warp->pc[valid_threads[i]] += 4;
+  }
+
+  // Advance PC before returning
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
   }
 
   return !warp->suspended;
@@ -485,9 +518,14 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
 
   std::vector<int> results = cu->load(warp, addresses, 1);
 
+  // Write results immediately
   for (size_t i = 0; i < results.size(); i++) {
     rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-    warp->pc[valid_threads[i]] += 4;
+  }
+
+  // Advance PC before returning
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
   }
 
   return !warp->suspended;
@@ -511,10 +549,15 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
 
   std::vector<int> results = cu->load(warp, addresses, 1);
 
+  // Write results immediately
   for (size_t i = 0; i < results.size(); i++) {
     rf->set_register(warp->warp_id, valid_threads[i], rd,
                      static_cast<uint64_t>(results[i]));
-    warp->pc[valid_threads[i]] += 4;
+  }
+
+  // Advance PC before returning
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
   }
 
   return !warp->suspended;
@@ -541,6 +584,7 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, WORD_SIZE, values);
 
+  // Advance PC before returning (even if warp is suspended)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -568,6 +612,7 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, WORD_SIZE / 2, values);
 
+  // Advance PC before returning (even if warp is suspended)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -595,6 +640,7 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, 1, values);
 
+  // Advance PC before returning (even if warp is suspended)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -816,50 +862,113 @@ bool ExecutionUnit::sltu(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::remu(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
+  
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs1_reg = in->getOperand(1).getReg();
+  unsigned int rs2_reg = in->getOperand(2).getReg();
+  
+  // Collect register values for all active threads
+  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-
-    uint32_t u_rs1 = static_cast<uint32_t>(rs1);
-    uint32_t u_rs2 = static_cast<uint32_t>(rs2);
-
-    if (u_rs2 == 0) {
-      rf->set_register(warp->warp_id, thread, rd, u_rs1);
-    } else {
-      rf->set_register(warp->warp_id, thread, rd, u_rs1 % u_rs2);
-    }
-
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+  }
+  
+  // Issue to divider unit (unsigned remainder)
+  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, true)) {
+    return false;  // Unit is busy, need to retry
+  }
+  
+  // Advance PC
+  for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
-  return active_threads.size() > 0;
+  
+  return false;  // write_required = false, we'll handle writeback on resume
 }
 
 bool ExecutionUnit::divu(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
+  
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs1_reg = in->getOperand(1).getReg();
+  unsigned int rs2_reg = in->getOperand(2).getReg();
+  
+  // Collect register values for all active threads
+  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    unsigned int rd = in->getOperand(0).getReg();
-    int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
-    int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-
-    uint32_t u_rs1 = static_cast<uint32_t>(rs1);
-    uint32_t u_rs2 = static_cast<uint32_t>(rs2);
-
-    if (u_rs2 == 0) {
-      // Division by zero: set to all ones (MAX_UINT)
-      rf->set_register(warp->warp_id, thread, rd, 0xFFFFFFFF);
-    } else {
-      rf->set_register(warp->warp_id, thread, rd, u_rs1 / u_rs2);
-    }
-
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+  }
+  
+  // Issue to divider unit (unsigned division)
+  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, false)) {
+    return false;  // Unit is busy, need to retry
+  }
+  
+  // Advance PC
+  for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
-  return active_threads.size() > 0;
+  
+  return false;  // write_required = false, we'll handle writeback on resume
+}
+
+bool ExecutionUnit::div_(Warp *warp, std::vector<size_t> active_threads,
+                         MCInst *in) {
+  assert(in->getNumOperands() == 3);
+  
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs1_reg = in->getOperand(1).getReg();
+  unsigned int rs2_reg = in->getOperand(2).getReg();
+  
+  // Collect register values for all active threads
+  std::map<size_t, int> rs1_vals, rs2_vals;
+  for (auto thread : active_threads) {
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+  }
+  
+  // Issue to divider unit (signed division)
+  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, false)) {
+    return false;  // Unit is busy, need to retry
+  }
+  
+  // Advance PC
+  for (auto thread : active_threads) {
+    warp->pc[thread] += 4;
+  }
+  
+  return false;  // write_required = false, we'll handle writeback on resume
+}
+
+bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
+                         MCInst *in) {
+  assert(in->getNumOperands() == 3);
+  
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs1_reg = in->getOperand(1).getReg();
+  unsigned int rs2_reg = in->getOperand(2).getReg();
+  
+  // Collect register values for all active threads
+  std::map<size_t, int> rs1_vals, rs2_vals;
+  for (auto thread : active_threads) {
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+  }
+  
+  // Issue to divider unit (signed remainder)
+  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, true)) {
+    return false;  // Unit is busy, need to retry
+  }
+  
+  // Advance PC
+  for (auto thread : active_threads) {
+    warp->pc[thread] += 4;
+  }
+  
+  return false;  // write_required = false, we'll handle writeback on resume
 }
 
 bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
@@ -948,20 +1057,23 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, input_char);
     } break;
     case 0x820: {
+      // Read-only CSR: returns 1 if can put (queue not full), 0 if can't put
+      // In SIMTight: csrRead = Just do return (zeroExtend reqs.notFull)
       bool active = gpu_controller->is_gpu_active();
-      int status = active ? 0 : 1;
-      rf->set_register(warp->warp_id, thread, rd_reg, status);
-
-      if (rs1_val != 0) {
-        gpu_controller->launch_kernel();
-      }
+      int can_put = active ? 0 : 1;  // Can put if GPU is not active
+      rf->set_register(warp->warp_id, thread, rd_reg, can_put);
+      // Writes to CSR 0x820 are ignored (read-only)
     } break;
-    case 0x823:
+    case 0x823: {
+      // Write-only CSR: writing PC starts kernel (if rs1_val != 0)
+      // In SIMTight: csrWrite = Just \x -> do enq reqs (simtCmd_StartPipeline, x, ...)
       if (rs1_val != 0) {
         gpu_controller->set_pc(rs1_val);
         gpu_controller->launch_kernel();
       }
-      break;
+      // CSR 0x823 is write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
     case 0x824: {
       bool active = gpu_controller->is_gpu_active();
       int status = active ? 0 : 1;
@@ -1070,6 +1182,10 @@ ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf,
 }
 
 void ExecuteSuspend::execute() {
+  // Tick functional units every cycle
+  eu->get_mul_unit().tick();
+  eu->get_div_unit().tick();
+  
   if (!PipelineStage::input_latch->updated)
     return;
 
@@ -1089,17 +1205,20 @@ void ExecuteSuspend::execute() {
     }
   }
 
-  for (int i = 0; i < warp->size; i++) {
-    if (!warp->finished[i] && warp->pc[i] <= max_addr) {
-      insert_warp(warp);
-      break;
+  // If warp was suspended (by functional unit or memory), don't reinsert yet
+  if (!warp->suspended) {
+    for (int i = 0; i < warp->size; i++) {
+      if (!warp->finished[i] && warp->pc[i] <= max_addr) {
+        insert_warp(warp);
+        break;
+      }
     }
   }
 
   PipelineStage::input_latch->updated = false;
   // We use the updated flag to tell the writeback/resume stage
   // whether or not to "perform a writeback" or to check for memory
-  // responses
+  // responses or functional unit completions
   PipelineStage::output_latch->updated = result.write_required;
   PipelineStage::output_latch->warp = warp;
   PipelineStage::output_latch->active_threads =

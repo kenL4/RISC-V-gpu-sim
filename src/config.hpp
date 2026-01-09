@@ -6,6 +6,14 @@
 constexpr size_t DRAM_BEAT_BYTES = 64;
 constexpr size_t DRAM_BEAT_LOG_BYTES = 6;
 constexpr size_t SIM_DRAM_LATENCY = 30;
+
+// Functional unit latencies (matching SIMTight)
+// Multiplier: 3 cycles (3-stage pipeline)
+constexpr size_t SIM_MUL_LATENCY = 3;
+// Divider: 32 cycles (sequential divider, default in SIMTight)
+// Note: Full-throughput divider is configurable (12 cycles) but disabled by default
+constexpr size_t SIM_DIV_LATENCY = 32;
+constexpr size_t SIM_REM_LATENCY = 32;  // Same as division (uses same unit)
 constexpr size_t SIM_SHARED_SRAM_BASE = 0xBFFF0000;
 constexpr size_t SIM_SIMT_STACK_BASE = 0xC0000000;
 constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spilling rn

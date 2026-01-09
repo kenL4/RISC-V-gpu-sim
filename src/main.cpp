@@ -29,13 +29,22 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf);
+  p->add_stage<WritebackResume>(cu, rf, true);  // true = CPU pipeline
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
   std::shared_ptr<ExecuteSuspend> execute_stage =
       std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
+  std::shared_ptr<WritebackResume> writeback_stage =
+      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(5));
+  
   execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
+    ws->insert_warp(warp);
+  };
+  
+  // Connect WritebackResume to ExecutionUnit and set up warp insertion
+  writeback_stage->set_execution_unit(execute_stage->get_execution_unit());
+  writeback_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
   };
 
@@ -67,13 +76,22 @@ Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf);
+  p->add_stage<WritebackResume>(cu, rf, false);  // false = GPU pipeline
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
   std::shared_ptr<ExecuteSuspend> execute_stage =
       std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
+  std::shared_ptr<WritebackResume> writeback_stage =
+      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(5));
+  
   execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
+    ws->insert_warp(warp);
+  };
+  
+  // Connect WritebackResume to ExecutionUnit and set up warp insertion
+  writeback_stage->set_execution_unit(execute_stage->get_execution_unit());
+  writeback_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
   };
 
