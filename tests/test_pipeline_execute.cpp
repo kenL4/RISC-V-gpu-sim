@@ -1,4 +1,5 @@
 #include "test_pipeline_execute.hpp"
+#include "config.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline_execute.hpp"
 #include "gpu/register_file.hpp"
@@ -64,6 +65,58 @@ uint32_t encode_j_type(uint32_t imm, uint32_t rd, uint32_t opcode) {
   uint32_t imm19_12 = (imm >> 12) & 0xFF;
   return (imm20 << 31) | (imm10_1 << 21) | (imm11 << 20) | (imm19_12 << 12) |
          (rd << 7) | opcode;
+}
+
+// Helper function to complete a multiplication operation and write back result
+// Simulates the pipeline behavior: tick the mul_unit until completion, then write back
+void complete_mul_operation(ExecutionUnit &eu, RegisterFile &rf, Warp *warp) {
+  // Tick the mul_unit enough times to complete the operation
+  for (size_t i = 0; i < SIM_MUL_LATENCY; ++i) {
+    eu.get_mul_unit().tick();
+  }
+  
+  // Check if operation completed and write back result
+  Warp *completed_warp = eu.get_mul_unit().peek_completed_warp();
+  if (completed_warp != nullptr && completed_warp == warp) {
+    unsigned int rd = eu.get_mul_unit().get_rd(completed_warp);
+    std::vector<size_t> active_threads = eu.get_mul_unit().get_active_threads(completed_warp);
+    
+    // Write back results for all active threads
+    for (size_t thread : active_threads) {
+      int result = eu.get_mul_unit().get_result(completed_warp, thread);
+      rf.set_register(completed_warp->warp_id, thread, rd, result);
+    }
+    
+    // Remove from completed_operations
+    eu.get_mul_unit().get_completed_warp();
+    completed_warp->suspended = false;
+  }
+}
+
+// Helper function to complete a division/remainder operation and write back result
+// Simulates the pipeline behavior: tick the div_unit until completion, then write back
+void complete_div_operation(ExecutionUnit &eu, RegisterFile &rf, Warp *warp) {
+  // Tick the div_unit enough times to complete the operation
+  for (size_t i = 0; i < SIM_DIV_LATENCY; ++i) {
+    eu.get_div_unit().tick();
+  }
+  
+  // Check if operation completed and write back result
+  Warp *completed_warp = eu.get_div_unit().peek_completed_warp();
+  if (completed_warp != nullptr && completed_warp == warp) {
+    unsigned int rd = eu.get_div_unit().get_rd(completed_warp);
+    std::vector<size_t> active_threads = eu.get_div_unit().get_active_threads(completed_warp);
+    
+    // Write back results for all active threads
+    for (size_t thread : active_threads) {
+      int result = eu.get_div_unit().get_result(completed_warp, thread);
+      rf.set_register(completed_warp->warp_id, thread, rd, result);
+    }
+    
+    // Remove from completed_operations
+    eu.get_div_unit().get_completed_warp();
+    completed_warp->suspended = false;
+  }
 }
 
 void test_execution_unit() {
@@ -309,18 +362,24 @@ void test_execution_unit() {
     uint32_t opcode = encode_r_type(1, 2, 1, 0, 4, OP_OP);
     inst = run_inst(&warp, opcode, "MUL x4, x1, x2");
     eu.execute(&warp, active_threads, inst);
+    // MUL has latency - need to tick and write back result
+    complete_mul_operation(eu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 200);
 
     // DIVU x4, x2, x1 (20 / 10 = 2)
     opcode = encode_r_type(1, 1, 2, 5, 4, OP_OP);
     inst = run_inst(&warp, opcode, "DIVU x4, x2, x1");
     eu.execute(&warp, active_threads, inst);
+    // DIVU has latency - need to tick and write back result
+    complete_div_operation(eu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 2);
 
     // REMU x4, x1, x2 (10 % 20 = 10)
     opcode = encode_r_type(1, 2, 1, 7, 4, OP_OP);
     inst = run_inst(&warp, opcode, "REMU x4, x1, x2");
     eu.execute(&warp, active_threads, inst);
+    // REMU has latency - need to tick and write back result
+    complete_div_operation(eu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 10);
   }
 
