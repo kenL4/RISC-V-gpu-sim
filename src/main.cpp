@@ -5,6 +5,7 @@
 #include "gpu/pipeline_execute.hpp"
 #include "gpu/pipeline_instr_fetch.hpp"
 #include "gpu/pipeline_op_fetch.hpp"
+#include "gpu/pipeline_op_latch.hpp"
 #include "gpu/pipeline_warp_scheduler.hpp"
 #include "gpu/pipeline_writeback.hpp"
 #include "host/host_register_file.hpp"
@@ -22,21 +23,22 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
                                   HostGPUControl *gpu_controller) {
   Pipeline *p = new Pipeline();
 
-  // Construct stages
-  p->add_stage<WarpScheduler>(1, 1, im->get_base_addr());
-  p->add_stage<ActiveThreadSelection>();
-  p->add_stage<InstructionFetch>(im, disasm);
-  p->add_stage<OperandFetch>();
+  // Construct stages (matching SIMTight's 7-stage pipeline)
+  p->add_stage<WarpScheduler>(1, 1, im->get_base_addr());  // Stage 0
+  p->add_stage<ActiveThreadSelection>();                     // Stage 1
+  p->add_stage<InstructionFetch>(im, disasm);                // Stage 2
+  p->add_stage<OperandFetch>();                              // Stage 3
+  p->add_stage<OperandLatch>();                              // Stage 4 (new)
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
-                               gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf, true);  // true = CPU pipeline
+                               gpu_controller);              // Stage 5
+  p->add_stage<WritebackResume>(cu, rf, true);              // Stage 6 (true = CPU pipeline)
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
   std::shared_ptr<ExecuteSuspend> execute_stage =
-      std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
+      std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(5));
   std::shared_ptr<WritebackResume> writeback_stage =
-      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(5));
+      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(6));
   
   execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
@@ -48,18 +50,19 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
     ws->insert_warp(warp);
   };
 
-  // Initialize latches
-  PipelineLatch *latches[6];
-  for (int i = 0; i < 6; i++) {
+  // Initialize latches (7 stages = 7 latches)
+  PipelineLatch *latches[7];
+  for (int i = 0; i < 7; i++) {
     latches[i] = new PipelineLatch();
   }
 
-  p->get_stage(0)->set_latches(latches[5], latches[0]);
-  p->get_stage(1)->set_latches(latches[0], latches[1]);
-  p->get_stage(2)->set_latches(latches[1], latches[2]);
-  p->get_stage(3)->set_latches(latches[2], latches[3]);
-  p->get_stage(4)->set_latches(latches[3], latches[4]);
-  p->get_stage(5)->set_latches(latches[4], latches[5]);
+  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
+  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
+  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
+  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
+  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch (new)
+  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
+  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
 
   return p;
 }
@@ -69,21 +72,22 @@ Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
                                   HostGPUControl *gpu_controller) {
   Pipeline *p = new Pipeline();
 
-  // Construct stages
-  p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), false);
-  p->add_stage<ActiveThreadSelection>();
-  p->add_stage<InstructionFetch>(im, disasm);
-  p->add_stage<OperandFetch>();
+  // Construct stages (matching SIMTight's 7-stage pipeline)
+  p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), false);  // Stage 0
+  p->add_stage<ActiveThreadSelection>();                                           // Stage 1
+  p->add_stage<InstructionFetch>(im, disasm);                                      // Stage 2
+  p->add_stage<OperandFetch>();                                                    // Stage 3
+  p->add_stage<OperandLatch>();                                                    // Stage 4 (new)
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
-                               gpu_controller);
-  p->add_stage<WritebackResume>(cu, rf, false);  // false = GPU pipeline
+                               gpu_controller);                                    // Stage 5
+  p->add_stage<WritebackResume>(cu, rf, false);                                   // Stage 6 (false = GPU pipeline)
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
   std::shared_ptr<ExecuteSuspend> execute_stage =
-      std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(4));
+      std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(5));
   std::shared_ptr<WritebackResume> writeback_stage =
-      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(5));
+      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(6));
   
   execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
@@ -95,18 +99,19 @@ Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
     ws->insert_warp(warp);
   };
 
-  // Initialize latches
-  PipelineLatch *latches[6];
-  for (int i = 0; i < 6; i++) {
+  // Initialize latches (7 stages = 7 latches)
+  PipelineLatch *latches[7];
+  for (int i = 0; i < 7; i++) {
     latches[i] = new PipelineLatch();
   }
 
-  p->get_stage(0)->set_latches(latches[5], latches[0]);
-  p->get_stage(1)->set_latches(latches[0], latches[1]);
-  p->get_stage(2)->set_latches(latches[1], latches[2]);
-  p->get_stage(3)->set_latches(latches[2], latches[3]);
-  p->get_stage(4)->set_latches(latches[3], latches[4]);
-  p->get_stage(5)->set_latches(latches[4], latches[5]);
+  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
+  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
+  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
+  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
+  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch (new)
+  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
+  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
 
   return p;
 }
