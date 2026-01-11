@@ -78,6 +78,13 @@ void test_ats_latch() {
   input.warp = &warp;
   input.updated = true;
 
+  // ActiveThreadSelection has 2-cycle latency (2 substages)
+  // 1st cycle: Compute and store in buffer
+  stage.execute();
+  assert(output.updated == false); // Not available yet (in buffer)
+
+  // 2nd cycle: Output from buffer
+  input.updated = false; // Clear input for second cycle
   stage.execute();
 
   assert(output.updated == true);

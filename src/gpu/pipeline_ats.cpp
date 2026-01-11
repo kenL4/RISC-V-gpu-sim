@@ -7,10 +7,27 @@ ActiveThreadSelection::ActiveThreadSelection() {
 }
 
 bool ActiveThreadSelection::is_active() {
-  return PipelineStage::input_latch->updated;
+  // Must also check stage_buffer because of 2-cycle latency
+  // If data is buffered, we're still active (will output on next cycle)
+  return PipelineStage::input_latch->updated || stage_buffer.valid;
 }
 
 void ActiveThreadSelection::execute() {
+  // 2nd substage: Output buffered results (matching SIMTight's 2nd substage)
+  if (stage_buffer.valid) {
+    PipelineStage::output_latch->updated = true;
+    PipelineStage::output_latch->warp = stage_buffer.warp;
+    PipelineStage::output_latch->active_threads = stage_buffer.active_threads;
+    log("Active Thread Selection",
+        "Warp " + std::to_string(stage_buffer.warp->warp_id) + " has " +
+            std::to_string(stage_buffer.active_threads.size()) + " active threads (substage 2)");
+    stage_buffer.valid = false;  // Clear buffer
+  } else {
+    PipelineStage::output_latch->updated = false;
+    PipelineStage::output_latch->warp = nullptr;
+  }
+
+  // 1st substage: Compute active threads (matching SIMTight's 1st substage)
   if (!PipelineStage::input_latch->updated) {
     return;
   }
@@ -34,13 +51,15 @@ void ActiveThreadSelection::execute() {
     // We should probably handle this case.
     // For now, just return empty active threads.
     PipelineStage::input_latch->updated = false;
-    PipelineStage::output_latch->updated = true;
-    PipelineStage::output_latch->warp = warp;
-    PipelineStage::output_latch->active_threads = {};
+    // Store in buffer for next cycle
+    stage_buffer.warp = warp;
+    stage_buffer.active_threads = {};
+    stage_buffer.valid = true;
     log("Active Thread Selection", "Warp " + std::to_string(warp->warp_id) +
-                                       " has 0 active threads (all finished)");
+                                       " has 0 active threads (all finished) (substage 1)");
     return;
   }
+  
   std::vector<uint64_t> active_threads;
   for (int i = 0; i < warp->size; i++) {
     if (warp->finished[i])
@@ -52,14 +71,12 @@ void ActiveThreadSelection::execute() {
     }
   }
 
-  // Update pipeline latches
+  // Store results in buffer for next cycle (2nd substage)
   PipelineStage::input_latch->updated = false;
-  PipelineStage::output_latch->updated = true;
-  PipelineStage::output_latch->warp = warp;
-  // Could avoid copy constructor but okay for now
-  PipelineStage::output_latch->active_threads = active_threads;
-
+  stage_buffer.warp = warp;
+  stage_buffer.active_threads = active_threads;
+  stage_buffer.valid = true;
   log("Active Thread Selection",
-      "Warp " + std::to_string(warp->warp_id) + " has " +
-          std::to_string(active_threads.size()) + " active threads");
+      "Warp " + std::to_string(warp->warp_id) + " computed " +
+          std::to_string(active_threads.size()) + " active threads (substage 1)");
 }

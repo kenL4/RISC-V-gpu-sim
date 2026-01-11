@@ -20,54 +20,122 @@ void WarpScheduler::flush_new_warps() {
   }
 }
 
+// firstHot: Isolate first (lowest) set bit
+// Returns a bitmask with only the lowest set bit of x
+uint64_t WarpScheduler::firstHot(uint64_t x) {
+  return x & (~x + 1);
+}
+
+// Fair scheduler: matches SIMTight's fairScheduler function
+// Returns (new_history, chosen_bitmask)
+std::pair<uint64_t, uint64_t> WarpScheduler::fair_scheduler(uint64_t hist, uint64_t avail) {
+  // First choice: available warp that's NOT in history
+  uint64_t first = firstHot(avail & ~hist);
+  
+  if (first != 0) {
+    // Found an available warp not in history: add to history and choose it
+    return std::make_pair(hist | first, first);
+  } else {
+    // All available warps are in history: choose any available and reset history
+    uint64_t second = firstHot(avail);
+    return std::make_pair(second, second);
+  }
+}
+
+
 void WarpScheduler::execute() {
   warp_issued_this_cycle = false;
 
-  // Flush new warps at the start so they're available for scheduling this cycle
+  // 2nd substage: Output the chosen warp from buffer (matching SIMTight's 2nd substage)
+  if (chosen_warp_buffer != nullptr) {
+    // Output the warp that was chosen in the previous cycle
+    PipelineStage::output_latch->updated = true;
+    PipelineStage::output_latch->warp = chosen_warp_buffer;
+    warp_issued_this_cycle = true;
+    log("Warp Scheduler",
+        "Warp " + std::to_string(chosen_warp_buffer->warp_id) + " scheduled to run (substage 2)");
+    chosen_warp_buffer = nullptr;  // Clear buffer
+  } else {
+    // No warp in buffer, output nothing
+    PipelineStage::output_latch->updated = false;
+    PipelineStage::output_latch->warp = nullptr;
+  }
+
+  // 1st substage: Choose a warp for next cycle (matching SIMTight's 1st substage)
   flush_new_warps();
 
   if (warp_queue.empty()) {
-    return;
+    return;  // No warps available
   }
 
-  std::queue<Warp *> suspended_queue;
-
-  Warp *scheduled_warp = nullptr;
+  // Build available bitmask: bit i set if warp i is available (not suspended)
+  // Match SIMTight: avail = warpQueue & ~suspended
+  uint64_t avail = 0;
+  
+  // First pass: build available bitmask
+  std::queue<Warp *> temp_queue;
   while (!warp_queue.empty()) {
-    if (!warp_queue.front()->suspended) {
-      scheduled_warp = warp_queue.front();
-      warp_queue.pop();
-      break;
-    }
-
-    suspended_queue.push(warp_queue.front());
+    Warp *w = warp_queue.front();
     warp_queue.pop();
+    temp_queue.push(w);
+    
+    if (!w->suspended) {
+      // Set bit at position warp_id
+      if (w->warp_id < 64) {
+        avail |= (1ULL << w->warp_id);
+      }
+    }
+  }
+  
+  // Restore queue
+  warp_queue = std::move(temp_queue);
+
+  // Apply fair scheduler
+  uint64_t chosen_bitmask = 0;
+  if (avail != 0) {
+    std::pair<uint64_t, uint64_t> result = fair_scheduler(sched_history, avail);
+    sched_history = result.first;
+    chosen_bitmask = result.second;
   }
 
-  // Reinsert suspended threads into main warp queue
-  while (!suspended_queue.empty()) {
-    Warp *suspended_warp = suspended_queue.front();
-    suspended_queue.pop();
-    warp_queue.push(suspended_warp);
+  // Find and remove warp with matching warp_id from chosen bitmask
+  Warp *chosen_warp = nullptr;
+  if (chosen_bitmask != 0) {
+    // Find the warp_id from the bitmask (lowest set bit)
+    uint64_t chosen_warp_id = __builtin_ctzll(chosen_bitmask);  // Count trailing zeros = bit position
+    
+    // Find and remove the chosen warp from queue
+    std::queue<Warp *> new_queue;
+    while (!warp_queue.empty()) {
+      Warp *w = warp_queue.front();
+      warp_queue.pop();
+      
+      if (w->warp_id == chosen_warp_id && !w->suspended && chosen_warp == nullptr) {
+        // Found the chosen warp (first match)
+        chosen_warp = w;
+        // Don't reinsert chosen warp
+      } else {
+        // Keep this warp in the queue
+        new_queue.push(w);
+      }
+    }
+    
+    // Update queue
+    warp_queue = std::move(new_queue);
   }
 
-  // Update pipeline latch
-  PipelineStage::output_latch->updated = scheduled_warp != nullptr;
-  PipelineStage::output_latch->warp = scheduled_warp;
-
-  if (scheduled_warp == nullptr) {
-    log("Warp Scheduler", "No warp ready to be scheduled");
-    return;
+  // Store chosen warp in buffer for next cycle (2nd substage)
+  if (chosen_warp != nullptr) {
+    chosen_warp_buffer = chosen_warp;
+    log("Warp Scheduler",
+        "Warp " + std::to_string(chosen_warp->warp_id) + " chosen (substage 1, fair scheduler)");
   }
-
-  warp_issued_this_cycle = true;
-
-  log("Warp Scheduler",
-      "Warp " + std::to_string(scheduled_warp->warp_id) + " scheduled to run");
 }
 
 bool WarpScheduler::is_active() {
-  return warp_queue.size() > 0 || new_warp_queue.size() > 0;
+  // Must also check chosen_warp_buffer because of 2-cycle latency
+  // If a warp is buffered, we're still active (will output on next cycle)
+  return warp_queue.size() > 0 || new_warp_queue.size() > 0 || chosen_warp_buffer != nullptr;
 }
 
 void WarpScheduler::insert_warp(Warp *warp) { new_warp_queue.push(warp); }
