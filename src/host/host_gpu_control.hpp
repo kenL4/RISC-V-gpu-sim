@@ -17,6 +17,7 @@ public:
   // Control
   void launch_kernel();
   bool is_gpu_active();
+  void set_pipeline(Pipeline *pipeline) { this->pipeline = pipeline; }
 
   // I/O
   void buffer_data(char val);
@@ -24,6 +25,7 @@ public:
 
 private:
   std::shared_ptr<WarpScheduler> scheduler;
+  Pipeline *pipeline = nullptr;
   uint64_t kernel_pc;
   uint64_t arg_ptr;
   uint64_t dims;

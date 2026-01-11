@@ -189,6 +189,7 @@ int main(int argc, char *argv[]) {
 
   gpu_controller.set_scheduler(
       std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0)));
+  gpu_controller.set_pipeline(gpu_pipeline);
 
   // Get references to stages we need for cycle counting
   std::shared_ptr<WarpScheduler> gpu_scheduler =
@@ -197,8 +198,10 @@ int main(int argc, char *argv[]) {
       std::dynamic_pointer_cast<WritebackResume>(gpu_pipeline->get_stage(5));
 
   // Execute the threads
+  // Matching SIMTight: pipelineActive stays true from kernel launch until all warps terminate
   while (cpu_pipeline->has_active_stages() ||
-         gpu_pipeline->has_active_stages()) {
+         gpu_pipeline->has_active_stages() ||
+         gpu_pipeline->is_pipeline_active()) {
 
     cpu_pipeline->execute();
     cu.tick();
@@ -207,8 +210,17 @@ int main(int argc, char *argv[]) {
     // Count cycles every cycle the GPU pipeline is active (matching SIMTight)
     // SIMTight counts cycles when pipelineActive is true, which is active
     // from kernel launch until all warps terminate
-    if (gpu_pipeline->has_active_stages()) {
+    if (gpu_pipeline->is_pipeline_active()) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
+    }
+    
+    // Check if all warps have completed and pipeline should become inactive
+    // When has_active_stages() returns false AND pipeline_active is true,
+    // it means all warps have completed - set pipeline_active = false
+    // This is a simplification - ideally we'd track completed warps explicitly
+    if (gpu_pipeline->is_pipeline_active() && !gpu_pipeline->has_active_stages()) {
+      // All warps have completed - set pipeline_active = false
+      gpu_pipeline->set_pipeline_active(false);
     }
   }
 

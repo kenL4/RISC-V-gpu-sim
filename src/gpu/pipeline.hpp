@@ -104,6 +104,13 @@ public:
    */
   std::shared_ptr<PipelineStage> get_stage(int index);
 
+  /*
+   * Set pipeline active state (matching SIMTight's pipelineActive)
+   * Pipeline stays active from kernel launch until all warps terminate
+   */
+  void set_pipeline_active(bool active) { pipeline_active = active; }
+  bool is_pipeline_active() const { return pipeline_active; }
+
   void set_debug(bool enabled) {
     for (auto stage : stages) {
       stage->set_debug(enabled);
@@ -112,6 +119,7 @@ public:
 
 private:
   std::vector<std::shared_ptr<PipelineStage>> stages;
+  bool pipeline_active = false;  // Matching SIMTight's pipelineActive
 };
 
 /*

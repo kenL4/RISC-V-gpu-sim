@@ -27,6 +27,10 @@ void HostGPUControl::launch_kernel() {
                    std::to_string(num_warps) + " warps"
             << std::endl;
   scheduler->set_active(true);
+  // Set pipeline_active = true when kernel launches (matching SIMTight)
+  if (pipeline != nullptr) {
+    pipeline->set_pipeline_active(true);
+  }
 }
 
 bool HostGPUControl::is_gpu_active() {
