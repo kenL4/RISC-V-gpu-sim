@@ -16,12 +16,14 @@ void OperandFetch::execute() {
     PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
     PipelineStage::output_latch->inst = PipelineStage::input_latch->inst;
     
-    std::stringstream op_stream;
-    for (llvm::MCOperand op : inst->getOperands()) {
-        op_stream << operandToString(op) << " ";
+    if (!warp->is_cpu) {
+      std::stringstream op_stream;
+      for (llvm::MCOperand op : inst->getOperands()) {
+          op_stream << operandToString(op) << " ";
+      }
+      std::string name = "Warp " + std::to_string(warp->warp_id);
+      log("Operand Fetch", name + " using operands " + op_stream.str());
     }
-    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
-    log("Operand Fetch", name + " using operands " + op_stream.str());
 };
 
 bool OperandFetch::is_active() {

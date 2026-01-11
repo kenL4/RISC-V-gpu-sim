@@ -62,6 +62,17 @@ private:
   // Requests are queued before processing, and processed one per cycle in tick()
   std::queue<MemRequest> pending_request_queue;
   
+  // Pipeline model: requests stay in pipeline for multiple cycles
+  // SIMTight coalescing unit has 5 pipeline stages, so requests take ~5 cycles
+  // We model this by keeping requests in the queue for pipeline_depth cycles
+  // before they can be processed
+  struct PipelineRequest {
+    MemRequest req;
+    size_t cycles_in_pipeline;  // How many cycles this request has been in pipeline
+  };
+  std::queue<PipelineRequest> pipeline_queue;  // Requests currently in pipeline
+  static constexpr size_t COALESCING_PIPELINE_DEPTH = 5;  // Matching SIMTight's 5-stage pipeline
+  
   // Store load results by warp (thread_id -> value)
   // Results are written to registers when warp resumes
   std::map<Warp *, std::pair<unsigned int, std::map<size_t, int>>> load_results_map;  // rd_reg -> (thread_id -> value)

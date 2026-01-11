@@ -68,13 +68,6 @@ execute_result ExecutionUnit::execute(Warp *warp,
     // If memory operation returns false AND warp is suspended, operation succeeded (writeback/resume happens later)
     // Matching SIMTight: retry when queue full (warp not suspended), suspend when operation accepted
     if (!res.write_required && !warp->suspended) {
-      static size_t retry_count = 0;
-      retry_count++;
-      if (retry_count <= 10) {  // Only print first 10
-        std::cout << "[DEBUG] Memory retry detected: LW, warp_id=" << warp->warp_id 
-                  << ", write_required=" << res.write_required 
-                  << ", suspended=" << warp->suspended << std::endl;
-      }
       res.success = false;
       res.counted = false;
     }
@@ -275,10 +268,10 @@ bool ExecutionUnit::mul(Warp *warp, std::vector<size_t> active_threads,
   
   // Issue to multiplier unit (will suspend warp)
   if (!mul_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd)) {
-    return false;  // Unit is busy, need to retry
+    return false;  // Unit is busy, need to retry - PC stays unchanged
   }
   
-  // Advance PC (warp is suspended, will resume when operation completes)
+  // Advance PC only after successful issue (matching SIMTight)
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
@@ -495,9 +488,9 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
   assert(in->getNumOperands() == 3);
 
   // Matching SIMTight: check canPut before accepting memory request
-  // If queue is full, return false to trigger retry
+  // If queue is full, return false to trigger retry (PC should NOT advance)
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -515,7 +508,7 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
   // Queue the load request (warp will be suspended, results written on resume)
   cu->load(warp, addresses, WORD_SIZE, rd, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request (matching SIMTight)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -530,7 +523,7 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -548,7 +541,7 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
   // Queue the load request (warp will be suspended, results written on resume)
   cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -563,7 +556,7 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -581,7 +574,7 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
   // Queue the load request (warp will be suspended, results written on resume)
   cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -596,7 +589,7 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -614,7 +607,7 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
   // Queue the load request (warp will be suspended, results written on resume)
   cu->load(warp, addresses, 1, rd, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -629,7 +622,7 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -647,7 +640,7 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
   // Queue the load request (warp will be suspended, results written on resume)
   cu->load(warp, addresses, 1, rd, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -662,7 +655,7 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -682,7 +675,7 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, WORD_SIZE, values);
 
-  // Advance PC before returning (even if warp is suspended)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -695,7 +688,7 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -715,7 +708,7 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, WORD_SIZE / 2, values);
 
-  // Advance PC before returning (even if warp is suspended)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -728,7 +721,7 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -748,7 +741,7 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
 
   cu->store(warp, addresses, 1, values);
 
-  // Advance PC before returning (even if warp is suspended)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -764,7 +757,7 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
 
   // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry
+    return false;  // Memory system busy, need to retry - PC stays unchanged
   }
 
   std::vector<uint64_t> addresses;
@@ -789,7 +782,7 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
   // Queue the atomic add request (warp will be suspended, old values written on resume)
   cu->atomic_add(warp, addresses, WORD_SIZE, rd, add_values, valid_threads);
 
-  // Advance PC before returning (warp is suspended, but PC should advance)
+  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -1027,10 +1020,10 @@ bool ExecutionUnit::remu(Warp *warp, std::vector<size_t> active_threads,
   
   // Issue to divider unit (unsigned remainder)
   if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, true)) {
-    return false;  // Unit is busy, need to retry
+    return false;  // Unit is busy, need to retry - PC stays unchanged
   }
   
-  // Advance PC
+  // Advance PC only after successful issue
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
@@ -1055,10 +1048,10 @@ bool ExecutionUnit::divu(Warp *warp, std::vector<size_t> active_threads,
   
   // Issue to divider unit (unsigned division)
   if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, false)) {
-    return false;  // Unit is busy, need to retry
+    return false;  // Unit is busy, need to retry - PC stays unchanged
   }
   
-  // Advance PC
+  // Advance PC only after successful issue
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
@@ -1083,10 +1076,10 @@ bool ExecutionUnit::div_(Warp *warp, std::vector<size_t> active_threads,
   
   // Issue to divider unit (signed division)
   if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, false)) {
-    return false;  // Unit is busy, need to retry
+    return false;  // Unit is busy, need to retry - PC stays unchanged
   }
   
-  // Advance PC
+  // Advance PC only after successful issue
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
@@ -1111,10 +1104,10 @@ bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
   
   // Issue to divider unit (signed remainder)
   if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, true)) {
-    return false;  // Unit is busy, need to retry
+    return false;  // Unit is busy, need to retry - PC stays unchanged
   }
   
-  // Advance PC
+  // Advance PC only after successful issue
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
@@ -1349,12 +1342,21 @@ void ExecuteSuspend::execute() {
 
   execute_result result = eu->execute(warp, active_threads, inst);
 
-  // Count retries when instruction needs to retry (matching SIMTight: "when retryWire.val do incRetryCount <== true")
-  // In SIMTight, retryWire is set when execute stage calls retry, and retry count is incremented every cycle
-  // Since warps stay in execute stage when retrying, we count retries every cycle the instruction needs to retry
+  // Handle retry logic (matching SIMTight behavior):
+  // - When retry happens, warp STAYS in execute stage (does NOT advance)
+  // - PC is NOT updated (stays the same)
+  // - Warp keeps retrying the same instruction until canPut becomes true
+  // - Instruction is NOT counted
+  // - Retries are counted every cycle the warp is retrying
   if (!result.success && !warp->suspended && !warp->is_cpu) {
+    // Retry needed: stay in execute stage, count retry, don't count instruction
+    // PC was NOT updated in instruction function, so it stays the same
     GPUStatisticsManager::instance().increment_gpu_retries();
     warp->retrying = true;
+    // Warp stays in execute stage - keep input_latch updated so it's processed again next cycle (matches SIMTight: retryWire.val keeps warp in execute with same PC)
+    PipelineStage::input_latch->updated = true;
+    PipelineStage::output_latch->updated = false;  // No output on retry
+    return;  // Don't process further - warp stays in execute and will retry next cycle
   } else {
     // Instruction succeeded or warp was suspended - clear retry flag
     warp->retrying = false;
@@ -1371,16 +1373,9 @@ void ExecuteSuspend::execute() {
     }
   }
 
-  // Reinsert warp logic (matching SIMTight behavior):
-  // - If instruction succeeded and warp not suspended: reinsert
-  // - If instruction needs retry (result.success == false): reinsert without advancing PC
-  //   Note: We reinsert to avoid blocking the pipeline, but count retries when the warp
-  //   is in execute stage and needs to retry (matching SIMTight's per-cycle retry counting)
-  // - If warp was suspended (by functional unit or memory): don't reinsert yet (will resume later)
+  // Reinsert warp logic (matching SIMTight): if instruction succeeded and warp not suspended, reinsert; if suspended, don't reinsert yet (will resume later)
   if (!warp->suspended) {
-    // Warp not suspended: reinsert it
-    // Note: If result.success == false (retry needed), PC was NOT advanced,
-    // so reinserting will retry the same instruction - correct behavior
+    // Warp not suspended: reinsert it (instruction succeeded)
     for (int i = 0; i < warp->size; i++) {
       if (!warp->finished[i] && warp->pc[i] <= max_addr) {
         insert_warp(warp);

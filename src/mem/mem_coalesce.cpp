@@ -13,10 +13,9 @@ CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
 
 bool CoalescingUnit::can_put() {
   // Matching SIMTight: memReqs.canPut returns false when queue is full
-  // Queue capacity is MEM_REQ_QUEUE_CAPACITY (32, matching SIMTight's makeSizedQueueCore 5)
-  // Check the pending request queue size (requests BEFORE processing)
-  // This matches SIMTight's behavior where canPut checks the input queue
-  return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
+  // Check total capacity: pending requests + requests in pipeline
+  size_t total_queue_size = pending_request_queue.size() + pipeline_queue.size();
+  return total_queue_size < MEM_REQ_QUEUE_CAPACITY;
 }
 
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
@@ -312,8 +311,7 @@ void CoalescingUnit::suspend_warp(Warp *warp,
 void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
                           size_t bytes, unsigned int rd_reg,
                           const std::vector<size_t> &active_threads) {
-  // Note: Caller should check can_put() before calling this function
-  // If queue is full, caller should retry (this function should not be called)
+  // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
   // Queue the request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
@@ -326,16 +324,37 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.active_threads = active_threads;
   pending_request_queue.push(req);
   
-  // Suspend warp immediately (request will be processed in tick())
-  // Results will be stored and written when warp resumes
+  // Suspend warp immediately (request will be processed in tick(), results stored and written when warp resumes)
   warp->suspended = true;
-  // Don't add to blocked_warps yet - that happens when request is processed
+  
+  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
+  int dram_bursts = calculate_bursts(addrs, bytes, false);
+  int dram_access_count = dram_bursts;  // For loads, count burst length
+  
+  // Count DRAM accesses
+  for (int i = 0; i < dram_access_count; i++) {
+    if (warp->is_cpu) {
+      GPUStatisticsManager::instance().increment_cpu_dram_accs();
+    } else {
+      GPUStatisticsManager::instance().increment_gpu_dram_accs();
+    }
+  }
+  
+  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  int latency;
+  if (dram_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+  } else if (dram_bursts == 1) {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  } else {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + (dram_bursts - 1);
+  }
+  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
                            size_t bytes, const std::vector<int> &vals) {
-  // Note: Caller should check can_put() before calling this function
-  // If queue is full, caller should retry (this function should not be called)
+  // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
   // Queue the request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
@@ -349,7 +368,29 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   
   // Suspend warp immediately (request will be processed in tick())
   warp->suspended = true;
-  // Don't add to blocked_warps yet - that happens when request is processed
+  
+  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
+  int dram_bursts = calculate_bursts(addrs, bytes, true);
+  int dram_access_count = calculate_request_count(addrs, bytes);  // For stores, count request count
+  
+  // Count DRAM accesses
+  for (int i = 0; i < dram_access_count; i++) {
+    if (warp->is_cpu) {
+      GPUStatisticsManager::instance().increment_cpu_dram_accs();
+    } else {
+      GPUStatisticsManager::instance().increment_gpu_dram_accs();
+    }
+  }
+  
+  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  int latency;
+  if (dram_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+  } else {
+    // For stores, latency is pipeline + DRAM latency
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  }
+  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
@@ -374,7 +415,29 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   // Suspend warp immediately (request will be processed in tick())
   // Results will be stored and written when warp resumes
   warp->suspended = true;
-  // Don't add to blocked_warps yet - that happens when request is processed
+  
+  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
+  // Atomic operations have same latency as stores
+  int dram_bursts = calculate_bursts(addrs, bytes, true);
+  int dram_access_count = calculate_request_count(addrs, bytes);  // For stores/atomics, count request count
+  
+  // Count DRAM accesses
+  for (int i = 0; i < dram_access_count; i++) {
+    if (warp->is_cpu) {
+      GPUStatisticsManager::instance().increment_cpu_dram_accs();
+    } else {
+      GPUStatisticsManager::instance().increment_gpu_dram_accs();
+    }
+  }
+  
+  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  int latency;
+  if (dram_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+  } else {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  }
+  blocked_warps[warp] = latency;
 }
 
 bool CoalescingUnit::is_busy() { 
@@ -433,12 +496,48 @@ void CoalescingUnit::suspend_warp_latency(Warp *warp, size_t latency) {
 }
 
 void CoalescingUnit::tick() {
-  // Process one request from queue per cycle (matching SIMTight pipeline behavior)
-  // In SIMTight, requests are processed through a pipeline, so we process one per cycle
-  if (!pending_request_queue.empty()) {
-    MemRequest req = pending_request_queue.front();
+  // Pipeline model: Move requests through pipeline stages
+  // 1. Advance requests in pipeline_queue (increment cycles_in_pipeline)
+  // 2. Process requests that have completed pipeline (cycles_in_pipeline >= DEPTH)
+  // 3. Move requests from pending_queue to pipeline_queue (if pipeline has space)
+  // Note: Order matters - we advance existing pipeline requests BEFORE adding new ones
+  // so new requests don't get advanced in the same cycle they're added
+  
+  // Step 1 & 2: Advance pipeline and process completed requests
+  // Track if we processed any requests this cycle (pipeline busy condition)
+  // In SIMTight, when stage 5 is busy (go5.val), the pipeline stalls and doesn't consume from input queue
+  bool requests_processed_this_cycle = false;
+  size_t pipeline_size = pipeline_queue.size();
+  for (size_t i = 0; i < pipeline_size; i++) {
+    PipelineRequest pipe_req = pipeline_queue.front();
+    pipeline_queue.pop();
+    
+    pipe_req.cycles_in_pipeline++;
+    
+    if (pipe_req.cycles_in_pipeline >= COALESCING_PIPELINE_DEPTH) {
+      // Request has completed pipeline, process it
+      process_mem_request(pipe_req.req);
+      requests_processed_this_cycle = true;
+    } else {
+      // Request still in pipeline, put it back
+      pipeline_queue.push(pipe_req);
+    }
+  }
+  
+  // Step 3: Move requests from pending to pipeline (matching SIMTight: consume when (NOT stalled OR NOT go1) AND NOT in feedback)
+  // Since we don't model DRAM queue stalls, we can always consume when there's space
+  bool go1_active = !pipeline_queue.empty();
+  bool stalled = false;
+  bool can_consume = (!stalled || !go1_active);
+  
+  if (can_consume && !pending_request_queue.empty() && 
+      pipeline_queue.size() < COALESCING_PIPELINE_DEPTH &&
+      (pipeline_queue.size() + pending_request_queue.size()) < MEM_REQ_QUEUE_CAPACITY) {
+    PipelineRequest pipe_req;
+    pipe_req.req = pending_request_queue.front();
+    pipe_req.cycles_in_pipeline = 0;
     pending_request_queue.pop();
-    process_mem_request(req);
+    pipeline_queue.push(pipe_req);
   }
   
   // Decrement latency counters for blocked warps
@@ -467,8 +566,9 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // Store results with rd_reg (will be written to registers when warp resumes)
     load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
     
-    // Suspend warp (adds to blocked_warps) - atomic operations have same latency as stores
-    suspend_warp(req.warp, req.addrs, req.bytes, true);
+    // Warp was already added to blocked_warps when request was queued
+    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
+    // No need to call suspend_warp again - latency was already set correctly
   } else if (req.is_store) {
     // Process store: write to memory
     for (size_t i = 0; i < req.addrs.size(); i++) {
@@ -477,8 +577,9 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
       scratchpad_mem->store(addr, req.bytes, val);
     }
     
-    // Suspend warp (adds to blocked_warps)
-    suspend_warp(req.warp, req.addrs, req.bytes, true);
+    // Warp was already added to blocked_warps when request was queued
+    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
+    // No need to call suspend_warp again - latency was already set correctly
   } else {
     // Process load: read from memory and store results
     std::map<size_t, int> results;
@@ -490,8 +591,9 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // Store results with rd_reg (will be written to registers when warp resumes)
     load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
     
-    // Suspend warp (adds to blocked_warps)
-    suspend_warp(req.warp, req.addrs, req.bytes, false);
+    // Warp was already added to blocked_warps when request was queued
+    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
+    // No need to call suspend_warp again - latency was already set correctly
   }
 }
 

@@ -23,8 +23,10 @@ void MockPipelineStage::execute() {
     if (!PipelineStage::input_latch->updated) return;
     
     Warp *warp = PipelineStage::input_latch->warp;
-    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
-    log("MockPipelineStage", name + " executing");
+    if (!warp->is_cpu) {
+      std::string name = "Warp " + std::to_string(warp->warp_id);
+      log("MockPipelineStage", name + " executing");
+    }
 
     // Update pipeline latches
     PipelineStage::input_latch->updated = false;

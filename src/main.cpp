@@ -203,9 +203,14 @@ int main(int argc, char *argv[]) {
          gpu_pipeline->has_active_stages() ||
          gpu_pipeline->is_pipeline_active()) {
 
+    if (Config::instance().isDebug()) {
+      static uint64_t cycle = 0;
+      cycle++;
+    }
+    
     cpu_pipeline->execute();
-    cu.tick();
     gpu_pipeline->execute();
+    cu.tick();
 
     // Count cycles every cycle the GPU pipeline is active (matching SIMTight)
     // SIMTight counts cycles when pipelineActive is true, which is active
@@ -214,10 +219,6 @@ int main(int argc, char *argv[]) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
     }
     
-    // Check if all warps have completed and pipeline should become inactive
-    // When has_active_stages() returns false AND pipeline_active is true,
-    // it means all warps have completed - set pipeline_active = false
-    // This is a simplification - ideally we'd track completed warps explicitly
     if (gpu_pipeline->is_pipeline_active() && !gpu_pipeline->has_active_stages()) {
       // All warps have completed - set pipeline_active = false
       gpu_pipeline->set_pipeline_active(false);
