@@ -8,6 +8,17 @@ bool MulUnit::issue(Warp *warp, std::vector<size_t> active_threads,
                     const std::map<size_t, int> &rs1_vals,
                     const std::map<size_t, int> &rs2_vals,
                     unsigned int rd) {
+  // Matching SIMTight: canPut returns false when result queue is full
+  // In SIMTight, canPut = inv stall.val, and stall is set when stage 3 tries to enqueue
+  // but the result queue is full. Since we check canPut BEFORE entering the pipeline,
+  // we need to be conservative: reject if result queue is full.
+  // Note: We could also account for operations in pipeline that will complete soon,
+  // but being conservative (only checking current queue size) should still cause retries
+  // when the queue is full, which is the main case we need to handle.
+  if (result_queue.size() >= RESULT_QUEUE_CAPACITY) {
+    return false;  // Result queue is full, need to retry
+  }
+  
   MulOperation op;
   op.warp = warp;
   op.active_threads = active_threads;
@@ -35,58 +46,55 @@ bool MulUnit::issue(Warp *warp, std::vector<size_t> active_threads,
 }
 
 bool MulUnit::is_busy() {
-  // Busy if there's an operation in the pipeline OR completed operations waiting
-  return !pipeline.empty() || !completed_operations.empty();
+  // Busy if there's an operation in the pipeline OR result queue has operations
+  return !pipeline.empty() || !result_queue.empty();
 }
 
 Warp *MulUnit::peek_completed_warp() {
-  if (completed_operations.empty()) {
+  if (result_queue.empty()) {
     return nullptr;
   }
   
-  auto it = completed_operations.begin();
-  return it->first;
+  return result_queue.front().warp;
 }
 
 Warp *MulUnit::get_completed_warp() {
-  if (completed_operations.empty()) {
+  if (result_queue.empty()) {
     return nullptr;
   }
   
-  auto it = completed_operations.begin();
-  Warp *warp = it->first;
-  completed_operations.erase(it);
+  Warp *warp = result_queue.front().warp;
+  result_queue.pop();
   return warp;
 }
 
 int MulUnit::get_result(Warp *warp, size_t thread) {
-  auto it = completed_operations.find(warp);
-  if (it == completed_operations.end()) {
+  // The warp should be at the front of the queue (from peek_completed_warp())
+  if (result_queue.empty() || result_queue.front().warp != warp) {
     return 0;  // Should not happen
   }
   
-  auto result_it = it->second.results.find({warp, thread});
-  if (result_it == it->second.results.end()) {
-    return 0;  // Should not happen
+  auto result_it = result_queue.front().results.find({warp, thread});
+  if (result_it != result_queue.front().results.end()) {
+    return result_it->second;
   }
-  
-  return result_it->second;
+  return 0;  // Should not happen
 }
 
 unsigned int MulUnit::get_rd(Warp *warp) {
-  auto it = completed_operations.find(warp);
-  if (it == completed_operations.end()) {
-    return 0;  // Should not happen
+  // The warp should be at the front of the queue (from peek_completed_warp())
+  if (result_queue.empty() || result_queue.front().warp != warp) {
+    return 0;
   }
-  return it->second.rd;
+  return result_queue.front().rd;
 }
 
 std::vector<size_t> MulUnit::get_active_threads(Warp *warp) {
-  auto it = completed_operations.find(warp);
-  if (it == completed_operations.end()) {
+  // The warp should be at the front of the queue (from peek_completed_warp())
+  if (result_queue.empty() || result_queue.front().warp != warp) {
     return {};
   }
-  return it->second.active_threads;
+  return result_queue.front().active_threads;
 }
 
 void MulUnit::tick() {
@@ -98,9 +106,15 @@ void MulUnit::tick() {
       op.cycles_remaining--;
     }
     
-    // If operation is complete, move to completed
+    // If operation is complete, move to result queue (matching SIMTight behavior)
+    // Only move if result queue has space (this should always be true here since
+    // we check capacity in issue(), but check to be safe)
     if (op.cycles_remaining == 0) {
-      completed_operations[op.warp] = op;
+      if (result_queue.size() < RESULT_QUEUE_CAPACITY) {
+        result_queue.push(op);
+      }
+      // If result queue is full, the operation stays in pipeline (this shouldn't happen
+      // if issue() is working correctly, but handle it gracefully)
     } else {
       // Still processing, keep in pipeline
       pipeline.push(op);

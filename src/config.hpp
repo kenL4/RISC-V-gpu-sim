@@ -14,6 +14,10 @@ constexpr size_t SIM_MUL_LATENCY = 3;
 // Note: Full-throughput divider is configurable (12 cycles) but disabled by default
 constexpr size_t SIM_DIV_LATENCY = 32;
 constexpr size_t SIM_REM_LATENCY = 32;  // Same as division (uses same unit)
+
+// Memory request queue capacity (matching SIMTight: makeSizedQueueCore 5 = 2^5 = 32)
+constexpr size_t MEM_REQ_QUEUE_CAPACITY = 32;
+
 constexpr size_t SIM_SHARED_SRAM_BASE = 0xBFFF0000;
 constexpr size_t SIM_SIMT_STACK_BASE = 0xC0000000;
 constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spilling rn

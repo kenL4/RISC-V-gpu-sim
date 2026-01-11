@@ -144,7 +144,7 @@ void test_writeback_latch() {
 
   Warp warp2(1, 32, 0x0, true);  // Use CPU warp to match CPU pipeline WritebackResume
   std::vector<uint64_t> addrs = {0x1000};
-  cu.load(&warp2, addrs, 4);
+  cu.load(&warp2, addrs, 4, 0, {0});
   assert(warp2.suspended == true);
 
   // Advance time to satisfy latency

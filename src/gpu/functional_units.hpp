@@ -50,7 +50,9 @@ private:
   };
   
   std::queue<MulOperation> pipeline;
-  std::map<Warp *, MulOperation> completed_operations;
+  // Result queue with capacity 2 (matching SIMTight's makeQueue default size)
+  static constexpr size_t RESULT_QUEUE_CAPACITY = 2;
+  std::queue<MulOperation> result_queue;  // Queue for completed operations waiting to be consumed
 };
 
 // Divider/Remainder unit with 32-cycle latency (sequential)

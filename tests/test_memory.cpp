@@ -81,7 +81,7 @@ void test_coalesce_latency() {
   // Trigger load with vector
   std::vector<uint64_t> addresses = {0x2000, 0x2004, 0x2008,
                                      0x200C}; // 1 burst (same block)
-  unit.load(&w, addresses, 4);
+  unit.load(&w, addresses, 4, 0, {0, 1, 2, 3});
 
   assert(w.suspended);
   assert(unit.is_busy());

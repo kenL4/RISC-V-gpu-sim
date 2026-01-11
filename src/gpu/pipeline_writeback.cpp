@@ -106,6 +106,17 @@ void WritebackResume::execute() {
   
   if (warp != nullptr) {
     warp->suspended = false;
+    
+    // Check if there are load results to write back
+    auto load_results = cu->get_load_results(warp);
+    if (!load_results.second.empty()) {
+      // Write load results to registers
+      unsigned int rd_reg = load_results.first;
+      for (const auto &[thread_id, value] : load_results.second) {
+        rf->set_register(warp->warp_id, thread_id, rd_reg, value);
+      }
+    }
+    
     PipelineStage::input_latch->updated = false;
     PipelineStage::output_latch->updated = true;  // Signal that warp was resumed
     PipelineStage::output_latch->warp = warp;

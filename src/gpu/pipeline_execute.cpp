@@ -64,20 +64,62 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = auipc(warp, active_threads, &inst);
   } else if (mnemonic == "LW") {
     res.write_required = lw(warp, active_threads, &inst);
+    // If memory operation returns false AND warp is not suspended, queue was full - need to retry
+    // If memory operation returns false AND warp is suspended, operation succeeded (writeback/resume happens later)
+    // Matching SIMTight: retry when queue full (warp not suspended), suspend when operation accepted
+    if (!res.write_required && !warp->suspended) {
+      static size_t retry_count = 0;
+      retry_count++;
+      if (retry_count <= 10) {  // Only print first 10
+        std::cout << "[DEBUG] Memory retry detected: LW, warp_id=" << warp->warp_id 
+                  << ", write_required=" << res.write_required 
+                  << ", suspended=" << warp->suspended << std::endl;
+      }
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "LH") {
     res.write_required = lh(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "LHU") {
     res.write_required = lhu(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "LB") {
     res.write_required = lb(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "LBU") {
     res.write_required = lbu(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "SW") {
     res.write_required = sw(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "SH") {
     res.write_required = sh(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "SB") {
     res.write_required = sb(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "JAL") {
     res.write_required = jal(warp, active_threads, &inst);
   } else if (mnemonic == "JALR") {
@@ -446,6 +488,12 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  // If queue is full, return false to trigger retry
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<size_t> valid_threads;
   unsigned int rd = in->getOperand(0).getReg();
@@ -458,25 +506,27 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE);
+  // Queue the load request (warp will be suspended, results written on resume)
+  cu->load(warp, addresses, WORD_SIZE, rd, valid_threads);
 
-  // Write results immediately (cu->load() returns results even if warp is suspended)
-  for (size_t i = 0; i < results.size(); i++) {
-    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-  }
-
-  // Advance PC before returning (warp may be suspended, but PC should advance)
+  // Advance PC before returning (warp is suspended, but PC should advance)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  return !warp->suspended;
+  // Return false (no immediate write required - results written on resume)
+  return false;
 }
 
 bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<size_t> valid_threads;
   unsigned int rd = in->getOperand(0).getReg();
@@ -489,25 +539,27 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
+  // Queue the load request (warp will be suspended, results written on resume)
+  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
 
-  // Write results immediately
-  for (size_t i = 0; i < results.size(); i++) {
-    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-  }
-
-  // Advance PC before returning
+  // Advance PC before returning (warp is suspended, but PC should advance)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  return !warp->suspended;
+  // Return false (no immediate write required - results written on resume)
+  return false;
 }
 
 bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<size_t> valid_threads;
   unsigned int rd = in->getOperand(0).getReg();
@@ -520,26 +572,27 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  std::vector<int> results = cu->load(warp, addresses, WORD_SIZE / 2);
+  // Queue the load request (warp will be suspended, results written on resume)
+  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
 
-  // Write results immediately
-  for (size_t i = 0; i < results.size(); i++) {
-    rf->set_register(warp->warp_id, valid_threads[i], rd,
-                     static_cast<uint64_t>(results[i]));
-  }
-
-  // Advance PC before returning
+  // Advance PC before returning (warp is suspended, but PC should advance)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  return !warp->suspended;
+  // Return false (no immediate write required - results written on resume)
+  return false;
 }
 
 bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<size_t> valid_threads;
   unsigned int rd = in->getOperand(0).getReg();
@@ -552,25 +605,27 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  std::vector<int> results = cu->load(warp, addresses, 1);
+  // Queue the load request (warp will be suspended, results written on resume)
+  cu->load(warp, addresses, 1, rd, valid_threads);
 
-  // Write results immediately
-  for (size_t i = 0; i < results.size(); i++) {
-    rf->set_register(warp->warp_id, valid_threads[i], rd, results[i]);
-  }
-
-  // Advance PC before returning
+  // Advance PC before returning (warp is suspended, but PC should advance)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  return !warp->suspended;
+  // Return false (no immediate write required - results written on resume)
+  return false;
 }
 
 bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<size_t> valid_threads;
   unsigned int rd = in->getOperand(0).getReg();
@@ -583,25 +638,26 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  std::vector<int> results = cu->load(warp, addresses, 1);
+  // Queue the load request (warp will be suspended, results written on resume)
+  cu->load(warp, addresses, 1, rd, valid_threads);
 
-  // Write results immediately
-  for (size_t i = 0; i < results.size(); i++) {
-    rf->set_register(warp->warp_id, valid_threads[i], rd,
-                     static_cast<uint64_t>(results[i]));
-  }
-
-  // Advance PC before returning
+  // Advance PC before returning (warp is suspended, but PC should advance)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  return !warp->suspended;
+  // Return false (no immediate write required - results written on resume)
+  return false;
 }
 
 bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
+
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
 
   std::vector<uint64_t> addresses;
   std::vector<int> values;
@@ -631,6 +687,11 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
   std::vector<uint64_t> addresses;
   std::vector<int> values;
   std::vector<size_t> valid_threads;
@@ -658,6 +719,11 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
+
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
 
   std::vector<uint64_t> addresses;
   std::vector<int> values;

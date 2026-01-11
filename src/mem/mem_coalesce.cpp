@@ -1,6 +1,7 @@
 #include "mem_coalesce.hpp"
 #include "config.hpp"
 #include <algorithm>
+#include <iostream>
 
 // Use centralized config values from config.hpp
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)
@@ -8,6 +9,14 @@
 
 CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
     : scratchpad_mem(scratchpad_mem) {
+}
+
+bool CoalescingUnit::can_put() {
+  // Matching SIMTight: memReqs.canPut returns false when queue is full
+  // Queue capacity is MEM_REQ_QUEUE_CAPACITY (32, matching SIMTight's makeSizedQueueCore 5)
+  // Check the pending request queue size (requests BEFORE processing)
+  // This matches SIMTight's behavior where canPut checks the input queue
+  return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
 }
 
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
@@ -300,30 +309,45 @@ void CoalescingUnit::suspend_warp(Warp *warp,
   blocked_warps[warp] = latency;
 }
 
-std::vector<int> CoalescingUnit::load(Warp *warp,
-                                      const std::vector<uint64_t> &addrs,
-                                      size_t bytes) {
-  suspend_warp(warp, addrs, bytes, false);
-  std::vector<int> results;
-
-  // Read directly from backing memory (no cache)
-  for (uint64_t addr : addrs) {
-    int64_t value = scratchpad_mem->load(addr, bytes);
-    results.push_back(static_cast<int>(value));
-  }
-  return results;
+void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
+                          size_t bytes, unsigned int rd_reg,
+                          const std::vector<size_t> &active_threads) {
+  // Note: Caller should check can_put() before calling this function
+  // If queue is full, caller should retry (this function should not be called)
+  
+  // Queue the request (matching SIMTight: requests go into queue before processing)
+  MemRequest req;
+  req.warp = warp;
+  req.addrs = addrs;
+  req.bytes = bytes;
+  req.is_store = false;
+  req.rd_reg = rd_reg;
+  req.active_threads = active_threads;
+  pending_request_queue.push(req);
+  
+  // Suspend warp immediately (request will be processed in tick())
+  // Results will be stored and written when warp resumes
+  warp->suspended = true;
+  // Don't add to blocked_warps yet - that happens when request is processed
 }
 
 void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
                            size_t bytes, const std::vector<int> &vals) {
-  suspend_warp(warp, addrs, bytes, true);
-
-  // Write directly to backing memory (no cache)
-  for (size_t i = 0; i < addrs.size(); i++) {
-    uint64_t addr = addrs[i];
-    uint64_t val = static_cast<uint64_t>(vals[i]);
-    scratchpad_mem->store(addr, bytes, val);
-  }
+  // Note: Caller should check can_put() before calling this function
+  // If queue is full, caller should retry (this function should not be called)
+  
+  // Queue the request (matching SIMTight: requests go into queue before processing)
+  MemRequest req;
+  req.warp = warp;
+  req.addrs = addrs;
+  req.bytes = bytes;
+  req.is_store = true;
+  req.store_values = vals;
+  pending_request_queue.push(req);
+  
+  // Suspend warp immediately (request will be processed in tick())
+  warp->suspended = true;
+  // Don't add to blocked_warps yet - that happens when request is processed
 }
 
 bool CoalescingUnit::is_busy() { return !blocked_warps.empty(); }
@@ -377,8 +401,54 @@ void CoalescingUnit::suspend_warp_latency(Warp *warp, size_t latency) {
 }
 
 void CoalescingUnit::tick() {
+  // Process one request from queue per cycle (matching SIMTight pipeline behavior)
+  // In SIMTight, requests are processed through a pipeline, so we process one per cycle
+  if (!pending_request_queue.empty()) {
+    MemRequest req = pending_request_queue.front();
+    pending_request_queue.pop();
+    process_mem_request(req);
+  }
+  
+  // Decrement latency counters for blocked warps
   for (auto &[key, val] : blocked_warps) {
     if (val > 0)
       val--;
   }
+}
+
+void CoalescingUnit::process_mem_request(const MemRequest &req) {
+  if (req.is_store) {
+    // Process store: write to memory
+    for (size_t i = 0; i < req.addrs.size(); i++) {
+      uint64_t addr = req.addrs[i];
+      uint64_t val = static_cast<uint64_t>(req.store_values[i]);
+      scratchpad_mem->store(addr, req.bytes, val);
+    }
+    
+    // Suspend warp (adds to blocked_warps)
+    suspend_warp(req.warp, req.addrs, req.bytes, true);
+  } else {
+    // Process load: read from memory and store results
+    std::map<size_t, int> results;
+    for (size_t i = 0; i < req.addrs.size(); i++) {
+      int64_t value = scratchpad_mem->load(req.addrs[i], req.bytes);
+      results[req.active_threads[i]] = static_cast<int>(value);
+    }
+    
+    // Store results with rd_reg (will be written to registers when warp resumes)
+    load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
+    
+    // Suspend warp (adds to blocked_warps)
+    suspend_warp(req.warp, req.addrs, req.bytes, false);
+  }
+}
+
+std::pair<unsigned int, std::map<size_t, int>> CoalescingUnit::get_load_results(Warp *warp) {
+  auto it = load_results_map.find(warp);
+  if (it != load_results_map.end()) {
+    std::pair<unsigned int, std::map<size_t, int>> results = it->second;
+    load_results_map.erase(it);  // Remove after retrieving
+    return results;
+  }
+  return std::make_pair(0, std::map<size_t, int>());  // Empty if no results
 }
