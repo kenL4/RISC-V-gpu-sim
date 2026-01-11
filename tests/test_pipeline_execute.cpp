@@ -119,6 +119,31 @@ void complete_div_operation(ExecutionUnit &eu, RegisterFile &rf, Warp *warp) {
   }
 }
 
+// Helper function to complete a load operation and write back result
+// Simulates the pipeline behavior: tick the coalescing unit until completion, then write back
+void complete_load_operation(CoalescingUnit &cu, RegisterFile &rf, Warp *warp) {
+  // Tick the coalescing unit until the warp is resumable
+  // Use a safety limit to prevent infinite loops
+  for (int i = 0; i < 1000; ++i) {
+    cu.tick();
+    Warp *resumed = cu.get_resumable_warp();
+    if (resumed != nullptr && resumed == warp) {
+      // Get load results and write them back
+      auto load_results = cu.get_load_results(warp);
+      if (!load_results.second.empty()) {
+        unsigned int rd_reg = load_results.first;
+        for (const auto &[thread_id, value] : load_results.second) {
+          rf.set_register(warp->warp_id, thread_id, rd_reg, value);
+        }
+      }
+      warp->suspended = false;
+      return;
+    }
+  }
+  // If we get here, the load didn't complete - this is an error
+  assert(false && "Load operation did not complete within safety limit");
+}
+
 void test_execution_unit() {
   std::cout << "Running test_execution_unit..." << std::endl;
 
@@ -226,6 +251,8 @@ void test_execution_unit() {
     opcode = encode_i_type(0x100, 0, 2, 2, OP_LOAD); // funct3=2 (LW)
     inst = run_inst(&warp, opcode, "LW x2, 0x100(x0)");
     eu.execute(&warp, active_threads, inst);
+    // Complete the load operation (tick until done and write back results)
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X2) == 0x12345678);
 
     // LH x2, 0x100(x0) -> x2 should be 0x5678 (sign extended if neg? 0x5678 is
@@ -233,6 +260,7 @@ void test_execution_unit() {
     opcode = encode_i_type(0x100, 0, 1, 2, OP_LOAD); // funct3=1 (LH)
     inst = run_inst(&warp, opcode, "LH x2, 0x100(x0)");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X2) == 0x5678);
 
     // LHU x2, 0x100(x0) -> x2 should be 0x5678
@@ -245,12 +273,14 @@ void test_execution_unit() {
     opcode = encode_i_type(0x100, 0, 0, 2, OP_LOAD); // funct3=0 (LB)
     inst = run_inst(&warp, opcode, "LB x2, 0x100(x0)");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X2) == 0x78);
 
     // LBU x2, 0x100(x0) -> x2 should be 0x78
     opcode = encode_i_type(0x100, 0, 4, 2, OP_LOAD); // funct3=4 (LBU)
     inst = run_inst(&warp, opcode, "LBU x2, 0x100(x0)");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X2) == 0x78);
   }
 

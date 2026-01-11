@@ -13,9 +13,11 @@ public:
   std::vector<uint64_t> nesting_level;
   std::vector<bool> finished;
   bool suspended;
+  bool retrying;  // Matching SIMTight's simtRetry flag - warp is retrying an instruction
   Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
       : warp_id(warp_id), size(size), is_cpu(is_cpu) {
     suspended = false;
+    retrying = false;
 
     pc.resize(size);
     nesting_level.resize(size);

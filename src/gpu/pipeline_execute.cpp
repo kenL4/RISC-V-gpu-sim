@@ -1288,9 +1288,11 @@ void ExecuteSuspend::execute() {
   eu->get_mul_unit().tick();
   eu->get_div_unit().tick();
   
+  // Check if we have a warp to process (either new or retrying)
+  // Matching SIMTight: warps stay in execute stage when retrying
   if (!PipelineStage::input_latch->updated)
     return;
-
+  
   Warp *warp = PipelineStage::input_latch->warp;
   MCInst inst = PipelineStage::input_latch->inst;
   std::vector<size_t> active_threads =
@@ -1298,9 +1300,15 @@ void ExecuteSuspend::execute() {
 
   execute_result result = eu->execute(warp, active_threads, inst);
 
-  // Count retries (matching SIMTight: "when retryWire.val do incRetryCount <== true")
-  if (!result.success && !warp->is_cpu) {
+  // Count retries when instruction needs to retry (matching SIMTight: "when retryWire.val do incRetryCount <== true")
+  // In SIMTight, retryWire is set when execute stage calls retry, and retry count is incremented every cycle
+  // Since warps stay in execute stage when retrying, we count retries every cycle the instruction needs to retry
+  if (!result.success && !warp->suspended && !warp->is_cpu) {
     GPUStatisticsManager::instance().increment_gpu_retries();
+    warp->retrying = true;
+  } else {
+    // Instruction succeeded or warp was suspended - clear retry flag
+    warp->retrying = false;
   }
 
   // Count instructions only if successful and not retried (matching SIMTight:
@@ -1317,6 +1325,8 @@ void ExecuteSuspend::execute() {
   // Reinsert warp logic (matching SIMTight behavior):
   // - If instruction succeeded and warp not suspended: reinsert
   // - If instruction needs retry (result.success == false): reinsert without advancing PC
+  //   Note: We reinsert to avoid blocking the pipeline, but count retries when the warp
+  //   is in execute stage and needs to retry (matching SIMTight's per-cycle retry counting)
   // - If warp was suspended (by functional unit or memory): don't reinsert yet (will resume later)
   if (!warp->suspended) {
     // Warp not suspended: reinsert it
@@ -1328,10 +1338,11 @@ void ExecuteSuspend::execute() {
         break;
       }
     }
+    PipelineStage::input_latch->updated = false;
+  } else {
+    // Warp is suspended (by functional unit or memory), will be resumed later
+    PipelineStage::input_latch->updated = false;
   }
-  // Else: warp is suspended (by functional unit or memory), will be resumed later
-
-  PipelineStage::input_latch->updated = false;
   // We use the updated flag to tell the writeback/resume stage
   // whether or not to "perform a writeback" or to check for memory
   // responses or functional unit completions

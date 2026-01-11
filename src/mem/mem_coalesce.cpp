@@ -350,7 +350,12 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   // Don't add to blocked_warps yet - that happens when request is processed
 }
 
-bool CoalescingUnit::is_busy() { return !blocked_warps.empty(); }
+bool CoalescingUnit::is_busy() { 
+  // Unit is busy if there are pending requests in queue OR blocked warps
+  // This matches the test expectation: after load() is called, the unit should be busy
+  // even though the request hasn't been processed yet (it's in the queue)
+  return !pending_request_queue.empty() || !blocked_warps.empty();
+}
 
 bool CoalescingUnit::is_busy_for_pipeline(bool is_cpu_pipeline) {
   for (auto &[key, val] : blocked_warps) {

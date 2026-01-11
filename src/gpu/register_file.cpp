@@ -35,7 +35,15 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
         }
     }
 
-    if (reg != llvm::RISCV::X0) warp_id_to_registers[warp_id][get_register_idx(reg)][thread] = value;
+    // Don't write to X0 (zero register) - it's always 0
+    if (reg != llvm::RISCV::X0) {
+        int reg_idx = get_register_idx(reg);
+        // Bounds check to prevent segfault
+        if (reg_idx >= 0 && reg_idx < static_cast<int>(registers_per_warp) && 
+            thread >= 0 && thread < static_cast<int>(thread_count)) {
+            warp_id_to_registers[warp_id][reg_idx][thread] = value;
+        }
+    }
 }
 
 std::optional<int> RegisterFile::get_csr(uint64_t warp_id, int thread, int csr) {
