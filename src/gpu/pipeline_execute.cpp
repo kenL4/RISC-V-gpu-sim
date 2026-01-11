@@ -120,6 +120,12 @@ execute_result ExecutionUnit::execute(Warp *warp,
       res.success = false;
       res.counted = false;
     }
+  } else if (mnemonic == "AMOADD_W") {
+    res.write_required = amoadd_w(warp, active_threads, &inst);
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "JAL") {
     res.write_required = jal(warp, active_threads, &inst);
   } else if (mnemonic == "JALR") {
@@ -747,6 +753,49 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
   return !warp->suspended;
+}
+
+bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
+                              MCInst *in) {
+  // AMOADD_W instruction: amoadd.w rd, rs2, (rs1)
+  // Performs: old_value = *rs1; *rs1 = old_value + rs2; rd = old_value
+  // Operands: rd (dest), rs2 (value to add), rs1 (base address), offset (usually 0)
+  assert(in->getNumOperands() >= 3);
+
+  // Matching SIMTight: check canPut before accepting memory request
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry
+  }
+
+  std::vector<uint64_t> addresses;
+  std::vector<int> add_values;
+  std::vector<size_t> valid_threads;
+  unsigned int rd = in->getOperand(0).getReg();
+  unsigned int rs2_reg = in->getOperand(1).getReg();
+  unsigned int rs1_reg = in->getOperand(2).getReg();
+  int64_t offset = 0;
+  if (in->getNumOperands() >= 4) {
+    offset = in->getOperand(3).getImm();
+  }
+
+  for (auto thread : active_threads) {
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
+    int rs1 = rf->get_register(warp->warp_id, thread, rs1_reg);
+    addresses.push_back(rs1 + offset);
+    add_values.push_back(rs2);
+    valid_threads.push_back(thread);
+  }
+
+  // Queue the atomic add request (warp will be suspended, old values written on resume)
+  cu->atomic_add(warp, addresses, WORD_SIZE, rd, add_values, valid_threads);
+
+  // Advance PC before returning (warp is suspended, but PC should advance)
+  for (auto thread : valid_threads) {
+    warp->pc[thread] += 4;
+  }
+
+  // Return false (no immediate write required - old values written on resume)
+  return false;
 }
 bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {

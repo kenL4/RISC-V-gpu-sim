@@ -321,6 +321,7 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.addrs = addrs;
   req.bytes = bytes;
   req.is_store = false;
+  req.is_atomic = false;
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
@@ -342,10 +343,36 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   req.addrs = addrs;
   req.bytes = bytes;
   req.is_store = true;
+  req.is_atomic = false;
   req.store_values = vals;
   pending_request_queue.push(req);
   
   // Suspend warp immediately (request will be processed in tick())
+  warp->suspended = true;
+  // Don't add to blocked_warps yet - that happens when request is processed
+}
+
+void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
+                                 size_t bytes, unsigned int rd_reg,
+                                 const std::vector<int> &add_values,
+                                 const std::vector<size_t> &active_threads) {
+  // Note: Caller should check can_put() before calling this function
+  // If queue is full, caller should retry (this function should not be called)
+  
+  // Queue the atomic add request (matching SIMTight: requests go into queue before processing)
+  MemRequest req;
+  req.warp = warp;
+  req.addrs = addrs;
+  req.bytes = bytes;
+  req.is_store = false;
+  req.is_atomic = true;
+  req.atomic_add_values = add_values;
+  req.rd_reg = rd_reg;
+  req.active_threads = active_threads;
+  pending_request_queue.push(req);
+  
+  // Suspend warp immediately (request will be processed in tick())
+  // Results will be stored and written when warp resumes
   warp->suspended = true;
   // Don't add to blocked_warps yet - that happens when request is processed
 }
@@ -422,7 +449,27 @@ void CoalescingUnit::tick() {
 }
 
 void CoalescingUnit::process_mem_request(const MemRequest &req) {
-  if (req.is_store) {
+  if (req.is_atomic) {
+    // Process atomic add: read old value, add to it, write back, return old value
+    std::map<size_t, int> results;
+    for (size_t i = 0; i < req.addrs.size(); i++) {
+      uint64_t addr = req.addrs[i];
+      // Read old value
+      int64_t old_value = scratchpad_mem->load(addr, req.bytes);
+      // Add the increment value
+      int64_t new_value = old_value + req.atomic_add_values[i];
+      // Write new value back
+      scratchpad_mem->store(addr, req.bytes, static_cast<uint64_t>(new_value));
+      // Return old value (will be written to rd_reg when warp resumes)
+      results[req.active_threads[i]] = static_cast<int>(old_value);
+    }
+    
+    // Store results with rd_reg (will be written to registers when warp resumes)
+    load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
+    
+    // Suspend warp (adds to blocked_warps) - atomic operations have same latency as stores
+    suspend_warp(req.warp, req.addrs, req.bytes, true);
+  } else if (req.is_store) {
     // Process store: write to memory
     for (size_t i = 0; i < req.addrs.size(); i++) {
       uint64_t addr = req.addrs[i];

@@ -69,6 +69,7 @@ private:
   bool sw(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool sh(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool sb(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
+  bool amoadd_w(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool jal(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool jalr(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool beq(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);

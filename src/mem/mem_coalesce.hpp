@@ -12,8 +12,10 @@ struct MemRequest {
   std::vector<uint64_t> addrs;
   size_t bytes;
   bool is_store;
+  bool is_atomic;  // Is this an atomic operation?
   std::vector<int> store_values;  // Only used for stores
-  unsigned int rd_reg;  // Destination register for loads
+  std::vector<int> atomic_add_values;  // Only used for atomic add operations
+  unsigned int rd_reg;  // Destination register for loads and atomic operations
   std::vector<size_t> active_threads;  // Active threads for this request
 };
 
@@ -32,6 +34,12 @@ public:
   // Queue a store request (returns immediately)
   void store(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
              const std::vector<int> &vals);
+  
+  // Queue an atomic add request (returns immediately, old values stored and written on resume)
+  // Performs: old_value = *addr; *addr = old_value + add_value; return old_value
+  void atomic_add(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
+                  unsigned int rd_reg, const std::vector<int> &add_values,
+                  const std::vector<size_t> &active_threads);
   
   bool is_busy();
   bool is_busy_for_pipeline(bool is_cpu_pipeline);
