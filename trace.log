@@ -1,119 +1,125 @@
-[  3%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/functional_units.cpp.o
-[  7%] Linking CXX static library libgpu_sim_lib.a
+[  3%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_execute.cpp.o
+[  7%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_writeback.cpp.o
+[ 11%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/mem/mem_coalesce.cpp.o
+[ 14%] Linking CXX static library libgpu_sim_lib.a
 [ 66%] Built target gpu_sim_lib
-[ 70%] Linking CXX executable RISCVGpuSim
+[ 70%] Building CXX object CMakeFiles/RISCVGpuSim.dir/src/main.cpp.o
+[ 74%] Linking CXX executable RISCVGpuSim
 [ 74%] Built target RISCVGpuSim
-[ 77%] Linking CXX executable unit_tests
+[ 77%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_memory.cpp.o
+[ 81%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_pipeline.cpp.o
+[ 85%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_pipeline_execute.cpp.o
+[ 88%] Linking CXX executable unit_tests
 [100%] Built target unit_tests
 Running kernel: Samples/VecAdd
 [Statistics]
-GPU Cycles: 5390
+GPU Cycles: 5498
 GPU Instrs: 172408
 CPU Instrs: 76195
-IPC: 31.9866
-GPU DRAMAccs: 2100
+IPC: 31.3583
+GPU DRAMAccs: 2006
 CPU DRAMAccs: 15091
 Running kernel: Samples/Histogram
 [Statistics]
-GPU Cycles: 6090
+GPU Cycles: 6204
 GPU Instrs: 191824
 CPU Instrs: 63170
-IPC: 31.4982
-GPU DRAMAccs: 1774
+IPC: 30.9194
+GPU DRAMAccs: 1766
 CPU DRAMAccs: 15347
 Running kernel: Samples/Reduce
 [Statistics]
-GPU Cycles: 12358
+GPU Cycles: 12593
 GPU Instrs: 394830
 CPU Instrs: 29925
-IPC: 31.9493
+IPC: 31.3531
 GPU DRAMAccs: 1725
 CPU DRAMAccs: 3087
 Running kernel: Samples/Scan
 [Statistics]
-GPU Cycles: 32920
+GPU Cycles: 33090
 GPU Instrs: 1052676
 CPU Instrs: 70585
-IPC: 31.9768
-GPU DRAMAccs: 2624
+IPC: 31.8125
+GPU DRAMAccs: 2496
 CPU DRAMAccs: 10377
 Running kernel: Samples/Transpose
 [Statistics]
-GPU Cycles: 17088
+GPU Cycles: 17352
 GPU Instrs: 546816
 CPU Instrs: 189423
-IPC: 32
-GPU DRAMAccs: 5248
+IPC: 31.5131
+GPU DRAMAccs: 4736
 CPU DRAMAccs: 16481
 Running kernel: Samples/MatVecMul
 [Statistics]
-GPU Cycles: 14976
+GPU Cycles: 15162
 GPU Instrs: 442240
 CPU Instrs: 131458
-IPC: 29.5299
+IPC: 29.1677
 GPU DRAMAccs: 4288
 CPU DRAMAccs: 24864
 Running kernel: Samples/MatMul
 [Statistics]
-GPU Cycles: 74048
+GPU Cycles: 74186
 GPU Instrs: 2369536
 CPU Instrs: 1980534
-IPC: 32
+IPC: 31.9405
 GPU DRAMAccs: 5696
 CPU DRAMAccs: 544866
 Running kernel: Samples/BitonicSortSmall
 [Statistics]
-GPU Cycles: 97792
+GPU Cycles: 98442
 GPU Instrs: 3006464
 CPU Instrs: 109116
-IPC: 30.7435
-GPU DRAMAccs: 6336
+IPC: 30.5405
+GPU DRAMAccs: 6080
 CPU DRAMAccs: 16465
 Running kernel: Samples/BitonicSortLarge
 [Statistics]
-GPU Cycles: 340175
-GPU Instrs: 9830642
-CPU Instrs: 224699
-IPC: 28.8988
-GPU DRAMAccs: 16640
+GPU Cycles: 341134
+GPU Instrs: 9826034
+CPU Instrs: 224657
+IPC: 28.804
+GPU DRAMAccs: 15616
 CPU DRAMAccs: 16807
 Running kernel: Samples/SparseMatVecMul
 [Statistics]
-GPU Cycles: 5392
+GPU Cycles: 9877
 GPU Instrs: 172544
 CPU Instrs: 85700
-IPC: 32
-GPU DRAMAccs: 3871
+IPC: 17.4693
+GPU DRAMAccs: 3869
 CPU DRAMAccs: 18839
 Running kernel: InHouse/BlockedStencil
 [Statistics]
-GPU Cycles: 14768
+GPU Cycles: 14928
 GPU Instrs: 457600
 CPU Instrs: 160148
-IPC: 30.9859
-GPU DRAMAccs: 4032
+IPC: 30.6538
+GPU DRAMAccs: 3904
 CPU DRAMAccs: 38896
 Running kernel: InHouse/StripedStencil
 [Statistics]
-GPU Cycles: 14006
+GPU Cycles: 14165
 GPU Instrs: 448192
 CPU Instrs: 137983
-IPC: 32
-GPU DRAMAccs: 4408
+IPC: 31.6408
+GPU DRAMAccs: 4280
 CPU DRAMAccs: 32624
 Running kernel: InHouse/VecGCD
 [Statistics]
-GPU Cycles: 6254
+GPU Cycles: 7360
 GPU Instrs: 147291
 CPU Instrs: 15623
-IPC: 23.5515
-GPU DRAMAccs: 1560
+IPC: 20.0124
+GPU DRAMAccs: 1556
 CPU DRAMAccs: 591
 Running kernel: InHouse/MotionEst
 [Statistics]
-GPU Cycles: 35660
+GPU Cycles: 36519
 GPU Instrs: 1138240
 CPU Instrs: 105129
-IPC: 31.9192
+IPC: 31.1684
 GPU DRAMAccs: 7416
 CPU DRAMAccs: 11128

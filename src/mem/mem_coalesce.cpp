@@ -141,6 +141,117 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
   return total_dram_accesses;
 }
 
+int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
+                                           size_t access_size) {
+  // Count the number of coalesced requests (not bursts)
+  // This is used for store access counting in SIMTight (stores count 1 per request)
+  constexpr size_t NUM_LANES = 32;
+  constexpr size_t LOG_LANES = 5;
+
+  if (addrs.empty()) {
+    return 0;
+  }
+
+  // Build list of (lane_id, addr) pairs for DRAM requests only
+  std::vector<std::pair<size_t, uint64_t>> pending;
+  for (size_t lane = 0; lane < addrs.size(); lane++) {
+    uint64_t addr = addrs[lane];
+    uint64_t addr_32 = 0xFFFFFFFF & addr;
+    // Skip SRAM region (shared SRAM)
+    if (SIM_SHARED_SRAM_BASE <= addr_32 && addr_32 < SIM_SIMT_STACK_BASE) {
+      continue;
+    }
+    pending.push_back({lane, addr});
+  }
+
+  if (pending.empty()) {
+    return 0;
+  }
+
+  int request_count = 0;
+
+  // Iterative coalescing: process lanes until all are served
+  while (!pending.empty()) {
+    request_count++;  // Count each coalesced request
+
+    // Pick the first pending lane as the leader
+    size_t leader_lane = pending[0].first;
+    uint64_t leader_addr = pending[0].second;
+
+    // Compute coalescing masks based on leader
+    std::vector<size_t> same_block_lanes;
+    std::vector<size_t> same_addr_lanes;
+
+    // SameBlock and SameAddress are computed relative to leader
+    uint64_t leader_block = leader_addr >> (LOG_LANES + 2);
+    uint64_t leader_low_bits = leader_addr & ((1ULL << (LOG_LANES + 2)) - 1);
+
+    for (const auto &[lane, addr] : pending) {
+      uint64_t block = addr >> (LOG_LANES + 2);
+      bool in_same_block = (block == leader_block);
+
+      uint64_t low_bits = addr & ((1ULL << (LOG_LANES + 2)) - 1);
+      if (in_same_block && low_bits == leader_low_bits) {
+        same_addr_lanes.push_back(lane);
+      }
+
+      if (in_same_block) {
+        bool matches = false;
+
+        if (access_size >= 4) {
+          uint64_t sub_word = addr & 0x3;
+          uint64_t leader_sub_word = leader_addr & 0x3;
+          uint64_t lane_bits = (addr >> 2) & (NUM_LANES - 1);
+          if (sub_word == leader_sub_word && lane_bits == lane) {
+            matches = true;
+          }
+        } else if (access_size == 2) {
+          uint64_t upper_bit = (addr >> (LOG_LANES + 1)) & 0x1;
+          uint64_t leader_upper = (leader_addr >> (LOG_LANES + 1)) & 0x1;
+          uint64_t lane_bits = (addr >> 1) & (NUM_LANES - 1);
+          if (upper_bit == leader_upper && lane_bits == lane) {
+            matches = true;
+          }
+        } else {
+          uint64_t upper_bits = (addr >> LOG_LANES) & 0x3;
+          uint64_t leader_upper = (leader_addr >> LOG_LANES) & 0x3;
+          uint64_t lane_bits = addr & (NUM_LANES - 1);
+          if (upper_bits == leader_upper && lane_bits == lane) {
+            matches = true;
+          }
+        }
+
+        if (matches) {
+          same_block_lanes.push_back(lane);
+        }
+      }
+    }
+
+    bool use_same_block =
+        (same_block_lanes.size() > 1) &&
+        (std::find(same_block_lanes.begin(), same_block_lanes.end(),
+                   leader_lane) != same_block_lanes.end());
+
+    std::vector<size_t> *served_lanes;
+    if (use_same_block) {
+      served_lanes = &same_block_lanes;
+    } else {
+      served_lanes = &same_addr_lanes;
+    }
+
+    // Remove served lanes from pending
+    std::set<size_t> served_set(served_lanes->begin(), served_lanes->end());
+    std::vector<std::pair<size_t, uint64_t>> remaining;
+    for (const auto &p : pending) {
+      if (served_set.find(p.first) == served_set.end()) {
+        remaining.push_back(p);
+      }
+    }
+    pending = std::move(remaining);
+  }
+
+  return request_count;
+}
 
 void CoalescingUnit::suspend_warp(Warp *warp,
                                   const std::vector<uint64_t> &addrs,
@@ -150,7 +261,18 @@ void CoalescingUnit::suspend_warp(Warp *warp,
   // Calculate number of coalesced DRAM bursts (unique cache-line-sized blocks)
   // This is the number of DRAM transactions that would be issued
   int dram_bursts = calculate_bursts(addrs, access_size, is_store);
-  for (int i = 0; i < dram_bursts; i++) {
+  
+  // Count DRAM accesses matching SIMTight behavior:
+  // - For loads: count the burst length (number of beats in the burst)
+  // - For stores: count 1 per store request (regardless of burst length)
+  int dram_access_count;
+  if (is_store) {
+    dram_access_count = calculate_request_count(addrs, access_size);
+  } else {
+    dram_access_count = dram_bursts;  // For loads, count burst length
+  }
+  
+  for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
     } else {

@@ -199,10 +199,10 @@ int main(int argc, char *argv[]) {
     cu.tick();
     gpu_pipeline->execute();
 
-    // The most accurate model of SIMTight's pipeline latency modelling
-    // that I've found so far is to count the number of times
-    // the scheduler successfully issued a new wrap
-    if (gpu_scheduler->did_issue_warp()) {
+    // Count cycles every cycle the GPU pipeline is active (matching SIMTight)
+    // SIMTight counts cycles when pipelineActive is true, which is active
+    // from kernel launch until all warps terminate
+    if (gpu_pipeline->has_active_stages()) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
     }
   }

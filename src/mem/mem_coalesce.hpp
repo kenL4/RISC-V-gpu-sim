@@ -28,4 +28,5 @@ private:
                     size_t access_size, bool is_store);
   int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size,
                        bool is_store);
+  int calculate_request_count(const std::vector<uint64_t> &addrs, size_t access_size);
 };
