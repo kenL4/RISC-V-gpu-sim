@@ -24,7 +24,15 @@ execute_result ExecutionUnit::execute(Warp *warp,
   } else if (mnemonic == "SUB") {
     res.write_required = sub(warp, active_threads, &inst);
   } else if (mnemonic == "MUL") {
+    bool was_suspended_before = warp->suspended;
     res.write_required = mul(warp, active_threads, &inst);
+    // If mul() returns false AND warp is not suspended, unit was busy - need to retry
+    // If mul() returns false AND warp is suspended, operation succeeded (writeback happens later)
+    // Matching SIMTight: retry when unit busy (warp not suspended), suspend when operation accepted
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "AND") {
     // Name followed by an underscore as and is a reserved keyword
     res.write_required = and_(warp, active_threads, &inst);
@@ -95,13 +103,41 @@ execute_result ExecutionUnit::execute(Warp *warp,
   } else if (mnemonic == "SLTU") {
     res.write_required = sltu(warp, active_threads, &inst);
   } else if (mnemonic == "REMU") {
+    bool was_suspended_before = warp->suspended;
     res.write_required = remu(warp, active_threads, &inst);
+    // If remu() returns false AND warp is not suspended, unit was busy - need to retry
+    // If remu() returns false AND warp is suspended, operation succeeded (writeback happens later)
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "DIVU") {
+    bool was_suspended_before = warp->suspended;
     res.write_required = divu(warp, active_threads, &inst);
+    // If divu() returns false AND warp is not suspended, unit was busy - need to retry
+    // If divu() returns false AND warp is suspended, operation succeeded (writeback happens later)
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "DIV") {
+    bool was_suspended_before = warp->suspended;
     res.write_required = div_(warp, active_threads, &inst);
+    // If div_() returns false AND warp is not suspended, unit was busy - need to retry
+    // If div_() returns false AND warp is suspended, operation succeeded (writeback happens later)
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "REM") {
+    bool was_suspended_before = warp->suspended;
     res.write_required = rem_(warp, active_threads, &inst);
+    // If rem_() returns false AND warp is not suspended, unit was busy - need to retry
+    // If rem_() returns false AND warp is suspended, operation succeeded (writeback happens later)
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "FENCE") {
     res.write_required = fence(warp, active_threads, &inst);
   } else if (mnemonic == "ECALL") {
@@ -1196,6 +1232,8 @@ void ExecuteSuspend::execute() {
 
   execute_result result = eu->execute(warp, active_threads, inst);
 
+  // Count instructions only if successful and not retried (matching SIMTight:
+  // "when (inv retryWire.val) do incInstrCount <== true")
   if (result.success && result.counted) {
     if (!warp->is_cpu) {
       GPUStatisticsManager::instance().increment_gpu_instrs(
@@ -1205,8 +1243,14 @@ void ExecuteSuspend::execute() {
     }
   }
 
-  // If warp was suspended (by functional unit or memory), don't reinsert yet
+  // Reinsert warp logic (matching SIMTight behavior):
+  // - If instruction succeeded and warp not suspended: reinsert
+  // - If instruction needs retry (result.success == false): reinsert without advancing PC
+  // - If warp was suspended (by functional unit or memory): don't reinsert yet (will resume later)
   if (!warp->suspended) {
+    // Warp not suspended: reinsert it
+    // Note: If result.success == false (retry needed), PC was NOT advanced,
+    // so reinserting will retry the same instruction - correct behavior
     for (int i = 0; i < warp->size; i++) {
       if (!warp->finished[i] && warp->pc[i] <= max_addr) {
         insert_warp(warp);
@@ -1214,6 +1258,7 @@ void ExecuteSuspend::execute() {
       }
     }
   }
+  // Else: warp is suspended (by functional unit or memory), will be resumed later
 
   PipelineStage::input_latch->updated = false;
   // We use the updated flag to tell the writeback/resume stage

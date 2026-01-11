@@ -128,8 +128,8 @@ CPU DRAMAccs: 591
 Running kernel: InHouse/MotionEst
 [Statistics]
 GPU Cycles: 33912
-GPU Instrs: 1013248
+GPU Instrs: 1013056
 CPU Instrs: 100823
-IPC: 29.8787
+IPC: 29.8731
 GPU DRAMAccs: 7176
 CPU DRAMAccs: 11128
