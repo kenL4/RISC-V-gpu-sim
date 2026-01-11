@@ -252,12 +252,15 @@ int main(int argc, char *argv[]) {
       (GPUStatisticsManager::instance().get_gpu_dram_accs());
   uint64_t cpu_dram_accs =
       (GPUStatisticsManager::instance().get_cpu_dram_accs());
+  uint64_t gpu_retries =
+      (GPUStatisticsManager::instance().get_gpu_retries());
   std::cout << "GPU Cycles: " << cycles << std::endl;
   std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
   std::cout << "CPU Instrs: " << cpu_instrs << std::endl;
   std::cout << "IPC: " << ipc << std::endl;
   std::cout << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
   std::cout << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
+  std::cout << "GPU Retries: " << gpu_retries << std::endl;
 
   delete cpu_pipeline;
   delete gpu_pipeline;

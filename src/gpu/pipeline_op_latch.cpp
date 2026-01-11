@@ -19,7 +19,8 @@ void OperandLatch::execute() {
     PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
     PipelineStage::output_latch->inst = PipelineStage::input_latch->inst;
     
-    log("Operand Latch", "Warp " + std::to_string(warp->warp_id) + " operands latched");
+    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
+    log("Operand Latch", name + " operands latched");
 }
 
 bool OperandLatch::is_active() {

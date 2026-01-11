@@ -18,8 +18,9 @@ void ActiveThreadSelection::execute() {
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = stage_buffer.warp;
     PipelineStage::output_latch->active_threads = stage_buffer.active_threads;
+    std::string name = stage_buffer.warp->is_cpu ? "CPU" : "Warp " + std::to_string(stage_buffer.warp->warp_id);
     log("Active Thread Selection",
-        "Warp " + std::to_string(stage_buffer.warp->warp_id) + " has " +
+        name + " has " +
             std::to_string(stage_buffer.active_threads.size()) + " active threads (substage 2)");
     stage_buffer.valid = false;  // Clear buffer
   } else {
@@ -55,8 +56,8 @@ void ActiveThreadSelection::execute() {
     stage_buffer.warp = warp;
     stage_buffer.active_threads = {};
     stage_buffer.valid = true;
-    log("Active Thread Selection", "Warp " + std::to_string(warp->warp_id) +
-                                       " has 0 active threads (all finished) (substage 1)");
+    std::string name = stage_buffer.warp->is_cpu ? "CPU" : "Warp " + std::to_string(stage_buffer.warp->warp_id);
+    log("Active Thread Selection", name + " has 0 active threads (all finished) (substage 1)");
     return;
   }
   
@@ -76,7 +77,8 @@ void ActiveThreadSelection::execute() {
   stage_buffer.warp = warp;
   stage_buffer.active_threads = active_threads;
   stage_buffer.valid = true;
+  std::string name = stage_buffer.warp->is_cpu ? "CPU" : "Warp " + std::to_string(stage_buffer.warp->warp_id);
   log("Active Thread Selection",
-      "Warp " + std::to_string(warp->warp_id) + " computed " +
+      name + " computed " +
           std::to_string(active_threads.size()) + " active threads (substage 1)");
 }

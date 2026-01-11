@@ -22,8 +22,9 @@ std::shared_ptr<PipelineStage> Pipeline::get_stage(int index) {
 void MockPipelineStage::execute() {
     if (!PipelineStage::input_latch->updated) return;
     
-    uint64_t warp_id = PipelineStage::input_latch->warp->warp_id;
-    log(name, "Warp " + std::to_string(warp_id));
+    Warp *warp = PipelineStage::input_latch->warp;
+    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
+    log("MockPipelineStage", name + " executing");
 
     // Update pipeline latches
     PipelineStage::input_latch->updated = false;

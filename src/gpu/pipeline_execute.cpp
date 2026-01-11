@@ -1169,9 +1169,9 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
 
     std::optional<int> csrr = rf->get_csr(warp->warp_id, thread, csr);
     if (!csrr.has_value()) {
+      std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
       log("CSRRW", "Control/Status Register " + std::to_string(csr) +
-                       " is undefined for warp " +
-                       std::to_string(warp->warp_id) + " and thread " +
+                       " is undefined for " + name + " and thread " +
                        std::to_string(thread) +
                        " -> trapping (skipping for now)");
       continue;
@@ -1232,6 +1232,11 @@ void ExecuteSuspend::execute() {
 
   execute_result result = eu->execute(warp, active_threads, inst);
 
+  // Count retries (matching SIMTight: "when retryWire.val do incRetryCount <== true")
+  if (!result.success && !warp->is_cpu) {
+    GPUStatisticsManager::instance().increment_gpu_retries();
+  }
+
   // Count instructions only if successful and not retried (matching SIMTight:
   // "when (inv retryWire.val) do incInstrCount <== true")
   if (result.success && result.counted) {
@@ -1276,13 +1281,14 @@ void ExecuteSuspend::execute() {
     op_stream << operandToString(op) << " ";
   }
 
+  std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
   if (!result.success) {
-    log("Execute/Suspend", "Warp " + std::to_string(warp->warp_id) +
+    log("Execute/Suspend", name +
                                " could not perform instruction " + inst_name);
     return;
   }
 
-  log("Execute/Suspend", "Warp " + std::to_string(warp->warp_id) +
+  log("Execute/Suspend", name +
                              " executed " + inst_name + "\t" + op_stream.str());
 }
 

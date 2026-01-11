@@ -1,25 +1,7 @@
-[  3%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/functional_units.cpp.o
-[  7%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline.cpp.o
-[ 10%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_ats.cpp.o
-[ 14%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_execute.cpp.o
-[ 17%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_instr_fetch.cpp.o
-[ 21%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_op_fetch.cpp.o
-[ 25%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_op_latch.cpp.o
-[ 28%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_warp_scheduler.cpp.o
-[ 32%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/gpu/pipeline_writeback.cpp.o
-[ 35%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/host/host_gpu_control.cpp.o
-[ 39%] Building CXX object CMakeFiles/gpu_sim_lib.dir/src/mem/mem_coalesce.cpp.o
-[ 42%] Linking CXX static library libgpu_sim_lib.a
 [ 67%] Built target gpu_sim_lib
 [ 71%] Building CXX object CMakeFiles/RISCVGpuSim.dir/src/main.cpp.o
 [ 75%] Linking CXX executable RISCVGpuSim
 [ 75%] Built target RISCVGpuSim
-[ 78%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_memory.cpp.o
-[ 82%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_host.cpp.o
-[ 85%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_pipeline.cpp.o
-[ 89%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_pipeline_scheduler.cpp.o
-[ 92%] Building CXX object CMakeFiles/unit_tests.dir/tests/test_pipeline_execute.cpp.o
-[ 96%] Linking CXX executable unit_tests
 [100%] Built target unit_tests
 Running kernel: Samples/VecAdd
 [Statistics]
@@ -29,6 +11,7 @@ CPU Instrs: 75625
 IPC: 31.3071
 GPU DRAMAccs: 2006
 CPU DRAMAccs: 15091
+GPU Retries: 0
 Running kernel: Samples/Histogram
 [Statistics]
 GPU Cycles: 6237
@@ -37,6 +20,7 @@ CPU Instrs: 62530
 IPC: 30.7558
 GPU DRAMAccs: 1766
 CPU DRAMAccs: 15347
+GPU Retries: 94
 Running kernel: Samples/Reduce
 [Statistics]
 GPU Cycles: 12691
@@ -45,6 +29,7 @@ CPU Instrs: 28599
 IPC: 31.111
 GPU DRAMAccs: 1725
 CPU DRAMAccs: 3087
+GPU Retries: 0
 Running kernel: Samples/Scan
 [Statistics]
 GPU Cycles: 33068
@@ -53,6 +38,7 @@ CPU Instrs: 67079
 IPC: 31.8337
 GPU DRAMAccs: 2496
 CPU DRAMAccs: 10377
+GPU Retries: 0
 Running kernel: Samples/Transpose
 [Statistics]
 GPU Cycles: 17417
@@ -61,6 +47,7 @@ CPU Instrs: 187621
 IPC: 31.3955
 GPU DRAMAccs: 4736
 CPU DRAMAccs: 16481
+GPU Retries: 0
 Running kernel: Samples/MatVecMul
 [Statistics]
 GPU Cycles: 15243
@@ -69,6 +56,7 @@ CPU Instrs: 129850
 IPC: 29.0127
 GPU DRAMAccs: 4288
 CPU DRAMAccs: 24864
+GPU Retries: 0
 Running kernel: Samples/MatMul
 [Statistics]
 GPU Cycles: 74224
@@ -77,6 +65,7 @@ CPU Instrs: 1972594
 IPC: 31.9241
 GPU DRAMAccs: 5696
 CPU DRAMAccs: 544866
+GPU Retries: 0
 Running kernel: Samples/BitonicSortSmall
 [Statistics]
 GPU Cycles: 98707
@@ -85,6 +74,7 @@ CPU Instrs: 98678
 IPC: 30.4585
 GPU DRAMAccs: 6080
 CPU DRAMAccs: 16465
+GPU Retries: 0
 Running kernel: Samples/BitonicSortLarge
 [Statistics]
 GPU Cycles: 341687
@@ -93,6 +83,7 @@ CPU Instrs: 188213
 IPC: 28.8146
 GPU DRAMAccs: 15616
 CPU DRAMAccs: 16743
+GPU Retries: 0
 Running kernel: Samples/SparseMatVecMul
 [Statistics]
 GPU Cycles: 10936
@@ -101,6 +92,7 @@ CPU Instrs: 85210
 IPC: 15.7776
 GPU DRAMAccs: 3869
 CPU DRAMAccs: 18839
+GPU Retries: 0
 Running kernel: InHouse/BlockedStencil
 [Statistics]
 GPU Cycles: 15015
@@ -109,6 +101,7 @@ CPU Instrs: 164989
 IPC: 30.4762
 GPU DRAMAccs: 3904
 CPU DRAMAccs: 40809
+GPU Retries: 0
 Running kernel: InHouse/StripedStencil
 [Statistics]
 GPU Cycles: 14210
@@ -117,6 +110,7 @@ CPU Instrs: 136499
 IPC: 31.5406
 GPU DRAMAccs: 4280
 CPU DRAMAccs: 32624
+GPU Retries: 0
 Running kernel: InHouse/VecGCD
 [Statistics]
 GPU Cycles: 9462
@@ -125,6 +119,7 @@ CPU Instrs: 15465
 IPC: 15.5666
 GPU DRAMAccs: 1556
 CPU DRAMAccs: 591
+GPU Retries: 0
 Running kernel: InHouse/MotionEst
 [Statistics]
 GPU Cycles: 33912
@@ -133,3 +128,4 @@ CPU Instrs: 100823
 IPC: 29.8731
 GPU DRAMAccs: 7176
 CPU DRAMAccs: 11128
+GPU Retries: 6

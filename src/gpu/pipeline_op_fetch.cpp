@@ -20,7 +20,8 @@ void OperandFetch::execute() {
     for (llvm::MCOperand op : inst->getOperands()) {
         op_stream << operandToString(op) << " ";
     }
-    log("Operand Fetch", "Warp " + std::to_string(warp->warp_id) + " using operands " + op_stream.str());
+    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
+    log("Operand Fetch", name + " using operands " + op_stream.str());
 };
 
 bool OperandFetch::is_active() {

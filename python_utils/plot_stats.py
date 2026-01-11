@@ -42,6 +42,14 @@ def read_my_trace(file):
         parts = line.split(" ")
         data[kernel]["cpu_dram_accs"] = int(parts[2])
 
+        # Read retry counter if available (may not exist in old trace files)
+        line = f.readline()
+        if line and "Retries" in line:
+            parts = line.split(" ")
+            data[kernel]["gpu_retries"] = int(parts[2])
+        else:
+            data[kernel]["gpu_retries"] = 0
+
         data[kernel]["gpu_ipc"] = float(data[kernel]["gpu_instrs"]) / data[kernel]["gpu_cycles"]
     return data
 
@@ -169,6 +177,26 @@ def plot_ipc(data, simtight):
     ax.set_xlabel('Kernel')
     ax.set_ylabel('IPC')
     ax.set_title('GPU IPC by GPU, Kernel')
+    ax.set_xticks(index + bar_width / 2)
+    ax.set_xticklabels(data.keys())
+    ax.legend()
+
+    plt.show()
+
+def plot_gpu_retries(data, simtight):
+    gpu_retries = [data[name].get("gpu_retries", 0) for name in data.keys()]
+    simtight_gpu_retries = [simtight[name].get("gpu_retries", 0) for name in simtight.keys()]
+    
+    index = np.arange(len(gpu_retries))
+    bar_width = 0.35
+
+    fig, ax = plt.subplots()
+    mine = ax.bar(index, gpu_retries, bar_width, label="Mine")
+    baseline = ax.bar(index + bar_width, simtight_gpu_retries, bar_width, label="SIMTight")
+
+    ax.set_xlabel('Kernel')
+    ax.set_ylabel('Retries')
+    ax.set_title('GPU Retries by GPU, Kernel')
     ax.set_xticks(index + bar_width / 2)
     ax.set_xticklabels(data.keys())
     ax.legend()

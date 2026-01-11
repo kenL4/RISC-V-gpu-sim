@@ -68,9 +68,9 @@ void WritebackResume::execute() {
         execution_unit->get_div_unit().get_completed_warp();
         
         div_warp->suspended = false;
-        
+        std::string name = div_warp->is_cpu ? "CPU" : "Warp " + std::to_string(div_warp->warp_id);
         log("Writeback/Resume",
-            "Warp " + std::to_string(div_warp->warp_id) + " completed DIV/REM operation");
+            name + " completed DIV/REM operation");
         
         // Reinsert warp to scheduler
         if (insert_warp) {
@@ -91,8 +91,9 @@ void WritebackResume::execute() {
         PipelineStage::input_latch->active_threads;
     PipelineStage::output_latch->inst = PipelineStage::input_latch->inst;
 
+    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
     log("Writeback/Resume",
-        "Warp " + std::to_string(warp->warp_id) + " values were written back");
+        name + " values were written back");
 
     if (Config::instance().isRegisterDump())
       rf->pretty_print(warp->warp_id);
@@ -111,8 +112,9 @@ void WritebackResume::execute() {
     PipelineStage::output_latch->active_threads = {};  // Will be set by next stage
     PipelineStage::output_latch->inst = llvm::MCInst();  // No instruction for resume
 
+    std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
     log("Writeback/Resume",
-        "Warp " + std::to_string(warp->warp_id) + " resumed from memory operation");
+        name + " resumed from memory operation");
     
     // Reinsert warp to scheduler so it can continue
     if (insert_warp) {

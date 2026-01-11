@@ -27,7 +27,8 @@ void InstructionFetch::execute() {
       PipelineStage::input_latch->active_threads;
   PipelineStage::output_latch->inst = inst;
 
-  log("Instruction Fetch", "Warp " + std::to_string(warp->warp_id) +
+  std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
+  log("Instruction Fetch", name +
                                " will execute instruction " +
                                disasm->getOpcodeName(inst.getOpcode()));
 };

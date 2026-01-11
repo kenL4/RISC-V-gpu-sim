@@ -52,8 +52,9 @@ void WarpScheduler::execute() {
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = chosen_warp_buffer;
     warp_issued_this_cycle = true;
+    std::string name = chosen_warp_buffer->is_cpu ? "CPU" : "Warp " + std::to_string(chosen_warp_buffer->warp_id);
     log("Warp Scheduler",
-        "Warp " + std::to_string(chosen_warp_buffer->warp_id) + " scheduled to run (substage 2)");
+        name + " scheduled to run (substage 2)");
     chosen_warp_buffer = nullptr;  // Clear buffer
   } else {
     // No warp in buffer, output nothing
