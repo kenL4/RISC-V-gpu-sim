@@ -3,127 +3,127 @@
 [100%] Built target unit_tests
 Running kernel: Samples/VecAdd
 [Statistics]
-GPU Cycles: 5544
-GPU Instrs: 172408
-CPU Instrs: 75625
-IPC: 31.0981
-GPU DRAMAccs: 2006
+GPU Cycles: 4969
+GPU Instrs: 158072
+CPU Instrs: 75577
+IPC: 31.8116
+GPU DRAMAccs: 1686
 CPU DRAMAccs: 15091
 GPU Retries: 0
 Running kernel: Samples/Histogram
 [Statistics]
-GPU Cycles: 6276
-GPU Instrs: 194824
-CPU Instrs: 62528
-IPC: 31.0427
-GPU DRAMAccs: 3204
+GPU Cycles: 5793
+GPU Instrs: 182536
+CPU Instrs: 62488
+IPC: 31.5098
+GPU DRAMAccs: 2948
 CPU DRAMAccs: 15347
 GPU Retries: 0
 Running kernel: Samples/Reduce
 [Statistics]
-GPU Cycles: 12751
-GPU Instrs: 394830
-CPU Instrs: 28613
-IPC: 30.9646
-GPU DRAMAccs: 1725
+GPU Cycles: 12182
+GPU Instrs: 380494
+CPU Instrs: 28553
+IPC: 31.2341
+GPU DRAMAccs: 1405
 CPU DRAMAccs: 3087
 GPU Retries: 0
 Running kernel: Samples/Scan
 [Statistics]
-GPU Cycles: 33143
-GPU Instrs: 1052676
-CPU Instrs: 67065
-IPC: 31.7616
-GPU DRAMAccs: 2496
+GPU Cycles: 32393
+GPU Instrs: 1032196
+CPU Instrs: 67017
+IPC: 31.8648
+GPU DRAMAccs: 1984
 CPU DRAMAccs: 10377
 GPU Retries: 0
 Running kernel: Samples/Transpose
 [Statistics]
-GPU Cycles: 17445
-GPU Instrs: 546816
-CPU Instrs: 187619
-IPC: 31.3451
-GPU DRAMAccs: 4736
+GPU Cycles: 16751
+GPU Instrs: 528384
+CPU Instrs: 187539
+IPC: 31.5434
+GPU DRAMAccs: 4288
 CPU DRAMAccs: 16481
 GPU Retries: 0
 Running kernel: Samples/MatVecMul
 [Statistics]
-GPU Cycles: 15326
-GPU Instrs: 442240
-CPU Instrs: 129832
-IPC: 28.8555
-GPU DRAMAccs: 4288
+GPU Cycles: 14812
+GPU Instrs: 427904
+CPU Instrs: 129788
+IPC: 28.889
+GPU DRAMAccs: 3968
 CPU DRAMAccs: 24864
 GPU Retries: 0
 Running kernel: Samples/MatMul
 [Statistics]
-GPU Cycles: 74520
-GPU Instrs: 2369536
-CPU Instrs: 1972586
-IPC: 31.7973
-GPU DRAMAccs: 5696
+GPU Cycles: 73742
+GPU Instrs: 2351104
+CPU Instrs: 1972484
+IPC: 31.8828
+GPU DRAMAccs: 5248
 CPU DRAMAccs: 544866
 GPU Retries: 0
 Running kernel: Samples/BitonicSortSmall
 [Statistics]
-GPU Cycles: 98843
-GPU Instrs: 3006464
-CPU Instrs: 98664
-IPC: 30.4166
-GPU DRAMAccs: 6080
+GPU Cycles: 98296
+GPU Instrs: 2992128
+CPU Instrs: 98620
+IPC: 30.44
+GPU DRAMAccs: 5760
 CPU DRAMAccs: 16465
 GPU Retries: 0
 Running kernel: Samples/BitonicSortLarge
 [Statistics]
-GPU Cycles: 341406
-GPU Instrs: 9841125
-CPU Instrs: 188139
-IPC: 28.8253
-GPU DRAMAccs: 15616
+GPU Cycles: 339713
+GPU Instrs: 9798629
+CPU Instrs: 187999
+IPC: 28.8438
+GPU DRAMAccs: 14528
 CPU DRAMAccs: 16743
 GPU Retries: 0
 Running kernel: Samples/SparseMatVecMul
 [Statistics]
-GPU Cycles: 11389
-GPU Instrs: 172544
-CPU Instrs: 85206
-IPC: 15.1501
-GPU DRAMAccs: 3869
+GPU Cycles: 10771
+GPU Instrs: 154112
+CPU Instrs: 85144
+IPC: 14.308
+GPU DRAMAccs: 3421
 CPU DRAMAccs: 18839
 GPU Retries: 0
 Running kernel: InHouse/BlockedStencil
 [Statistics]
-GPU Cycles: 15031
-GPU Instrs: 457600
-CPU Instrs: 165003
-IPC: 30.4437
-GPU DRAMAccs: 3904
+GPU Cycles: 14487
+GPU Instrs: 443264
+CPU Instrs: 164961
+IPC: 30.5974
+GPU DRAMAccs: 3584
 CPU DRAMAccs: 40809
 GPU Retries: 0
 Running kernel: InHouse/StripedStencil
 [Statistics]
-GPU Cycles: 14350
-GPU Instrs: 448192
-CPU Instrs: 136507
-IPC: 31.2329
-GPU DRAMAccs: 4280
+GPU Cycles: 13732
+GPU Instrs: 431808
+CPU Instrs: 136419
+IPC: 31.4454
+GPU DRAMAccs: 3896
 CPU DRAMAccs: 32624
 GPU Retries: 0
 Running kernel: InHouse/VecGCD
 [Statistics]
-GPU Cycles: 9472
-GPU Instrs: 147291
-CPU Instrs: 15791
-IPC: 15.5501
-GPU DRAMAccs: 1556
+GPU Cycles: 8904
+GPU Instrs: 132955
+CPU Instrs: 15095
+IPC: 14.9321
+GPU DRAMAccs: 1236
 CPU DRAMAccs: 591
 GPU Retries: 0
 Running kernel: InHouse/MotionEst
 [Statistics]
-GPU Cycles: 33723
-GPU Instrs: 995360
-CPU Instrs: 100733
-IPC: 29.5158
-GPU DRAMAccs: 7084
+GPU Cycles: 32803
+GPU Instrs: 973088
+CPU Instrs: 100661
+IPC: 29.6646
+GPU DRAMAccs: 6504
 CPU DRAMAccs: 11128
 GPU Retries: 6

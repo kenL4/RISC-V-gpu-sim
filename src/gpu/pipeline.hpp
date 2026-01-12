@@ -15,8 +15,10 @@ public:
   std::vector<bool> finished;
   std::vector<bool> retrying;  // Matching SIMTight's simtRetry: per-thread retry flag
   bool suspended;
+  bool in_barrier;  // Matching SIMTight's barrierBits: warp is in barrier state
   Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
       : warp_id(warp_id), size(size), is_cpu(is_cpu), suspended(false),
+        in_barrier(false),
         pc(size, start_pc), nesting_level(size, 0), finished(size, false),
         retrying(size, false) {
   };

@@ -1188,6 +1188,25 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
 
     bool handled = true;
     switch (csr) {
+    case 0x800: {
+      // SimEmit: Write-only CSR, emits word in simulation
+      // In SIMTight: csrWrite = Just \x -> do display "0x" (formatHex 8 x)
+      if (!Config::instance().isStatsOnly()) {
+        std::cout << "[SimEmit] 0x" << std::hex << rs1_val << std::dec << std::endl;
+      }
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
+    case 0x801: {
+      // SimFinish: Write-only CSR, terminates simulator
+      // In SIMTight: csrWrite = Just \x -> do finish
+      // For now, we'll just log it (actual termination handled elsewhere)
+      if (!Config::instance().isStatsOnly()) {
+        std::cout << "[SimFinish] Terminating simulator" << std::endl;
+      }
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
     case 0x802:
       rf->set_register(warp->warp_id, thread, rd_reg, 1);
       break;
@@ -1216,6 +1235,20 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         std::cout << "[Input] Returning " << input_char << std::endl;
       rf->set_register(warp->warp_id, thread, rd_reg, input_char);
     } break;
+    case 0x806: {
+      // InstrAddr: Write-only CSR, sets instruction mem address (for CPU)
+      // In SIMTight: csrWrite = Just \x -> do addrReg <== x
+      // This is CPU-only, but we should handle it to avoid errors
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
+    case 0x807: {
+      // WriteInstr: Write-only CSR, writes to instruction mem (for CPU)
+      // In SIMTight: csrWrite = Just \x -> do writeInstr (addrReg.val) x
+      // This is CPU-only, but we should handle it to avoid errors
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
     case 0x820: {
       // Read-only CSR: returns 1 if can put (queue not full), 0 if can't put
       // In SIMTight: csrRead = Just do return (zeroExtend reqs.notFull)
@@ -1223,6 +1256,20 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       int can_put = active ? 0 : 1;  // Can put if GPU is not active
       rf->set_register(warp->warp_id, thread, rd_reg, can_put);
       // Writes to CSR 0x820 are ignored (read-only)
+    } break;
+    case 0x821: {
+      // SIMTInstrAddr: Write-only CSR, sets instruction mem address (for SIMT)
+      // In SIMTight: csrWrite = Just \x -> do addrReg <== x
+      // This is CPU-only (used to write instructions to SIMT instruction memory)
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+    } break;
+    case 0x822: {
+      // SIMTWriteInstr: Write-only CSR, writes to instruction mem (for SIMT)
+      // In SIMTight: csrWrite = Just \x -> do enq reqs (simtCmd_WriteInstr, addrReg.val, x)
+      // This is CPU-only (used to write instructions to SIMT instruction memory)
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
     } break;
     case 0x823: {
       // Write-only CSR: writing PC starts kernel (if rs1_val != 0)
@@ -1249,6 +1296,10 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       gpu_controller->set_dims(rs1_val);
       break;
     case 0x828: {
+      // SIMTAskStats: Write-only CSR, requests a stat counter
+      // In SIMTight: writes request to queue, response comes via SIMTGet (0x825)
+      // For simplicity, we directly compute and store the stat value in CSR 0x825
+      // (matching the behavior but not the exact mechanism)
       uint64_t val = 0;
       switch (rs1_val) {
       case 0:
@@ -1257,6 +1308,9 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       case 1:
         val = GPUStatisticsManager::instance().get_gpu_instrs();
         break;
+      case 5:
+        val = GPUStatisticsManager::instance().get_gpu_retries();
+        break;
       case 9:
         val = GPUStatisticsManager::instance().get_gpu_dram_accs();
         break;
@@ -1264,7 +1318,10 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         val = 0;
         break;
       }
+      // Store result in CSR 0x825 (SIMTGet will read it)
       rf->set_csr(warp->warp_id, thread, 0x825, val);
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0);
     } break;
     case 0x830: {
       std::optional<int> val = rf->get_csr(warp->warp_id, thread, 0x830);
@@ -1275,11 +1332,37 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       }
       if (rs1_val != 0 || in->getOperand(0).getReg() == 0) {
         rf->set_csr(warp->warp_id, thread, 0x830, rs1_val);
+        // Matching SIMTight: writing 0 to CSR 0x830 is a barrier command
+        // Writing non-zero is termination (handled separately if needed)
+        if (rs1_val == 0) {
+          // Barrier: mark warp as in barrier (matching SIMTight: barrierBits!warpId5 <== true)
+          warp->in_barrier = true;
+          // Warp is not suspended for barrier - it's just marked as in barrier
+          // The scheduler will skip warps in barrier, and barrier release will clear the flag
+        } else {
+          // Termination: mark warp as finished (matching SIMTight: completedWarps <== completedWarps.val + 1)
+          // For now, just mark all threads as finished
+          for (size_t t = 0; t < warp->size; t++) {
+            warp->finished[t] = true;
+          }
+        }
       }
     } break;
     case 0x831: {
       uint64_t args = gpu_controller->get_arg_ptr();
       rf->set_register(warp->warp_id, thread, rd_reg, args);
+    } break;
+    case 0xc00: {
+      // Cycle: Read-only CSR, cycle count (lower 32 bits)
+      // In SIMTight: csrRead = Just do return (lower count.val)
+      uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
+      rf->set_register(warp->warp_id, thread, rd_reg, cycles & 0xFFFFFFFF);
+    } break;
+    case 0xc80: {
+      // CycleH: Read-only CSR, cycle count (upper 32 bits)
+      // In SIMTight: csrRead = Just do return (upper count.val)
+      uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
+      rf->set_register(warp->warp_id, thread, rd_reg, (cycles >> 32) & 0xFFFFFFFF);
     } break;
     default:
       handled = false;
@@ -1365,10 +1448,29 @@ void ExecuteSuspend::execute() {
   // - Instruction is NOT counted
   // - Retries are counted every cycle the warp is retrying
   // Matching SIMTight: retry is per-thread (per-lane), stored in thread state
+  // Matching SIMTight: retry counter increments once per cycle when any retry is active
+  // Check if warp was already retrying (before processing this cycle)
+  bool was_retrying = false;
+  for (auto thread : active_threads) {
+    if (warp->retrying[thread]) {
+      was_retrying = true;
+      break;
+    }
+  }
+  
+  // Matching SIMTight: count retry every cycle that retryWire.val is true
+  // If warp was already retrying, count it for this cycle
+  if (was_retrying && !warp->is_cpu) {
+    GPUStatisticsManager::instance().increment_gpu_retries();
+  }
+  
   if (!result.success && !warp->suspended && !warp->is_cpu) {
     // Retry needed: stay in execute stage, count retry, don't count instruction
     // PC was NOT updated in instruction function, so it stays the same
-    GPUStatisticsManager::instance().increment_gpu_retries();
+    // Count retry for this cycle (if not already counted above)
+    if (!was_retrying) {
+      GPUStatisticsManager::instance().increment_gpu_retries();
+    }
     // Set retry flag for all active threads (matching SIMTight: retryWire.val per-lane)
     for (auto thread : active_threads) {
       warp->retrying[thread] = true;

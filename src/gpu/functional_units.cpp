@@ -12,9 +12,10 @@ bool MulUnit::issue(Warp *warp, std::vector<size_t> active_threads,
   // In SIMTight, canPut = inv stall.val, and stall is set when stage 3 tries to enqueue
   // but the result queue is full. Since we check canPut BEFORE entering the pipeline,
   // we need to be conservative: reject if result queue is full.
-  // Note: We could also account for operations in pipeline that will complete soon,
-  // but being conservative (only checking current queue size) should still cause retries
-  // when the queue is full, which is the main case we need to handle.
+  // Note: tick() is called BEFORE issue() in ExecuteSuspend::execute(), so operations
+  // that completed this cycle have already been moved to result_queue.
+  // Writeback also runs before execute (pipeline executes backwards), so it may have
+  // consumed from result_queue. We check the current queue size, which should be accurate.
   if (result_queue.size() >= RESULT_QUEUE_CAPACITY) {
     return false;  // Result queue is full, need to retry
   }

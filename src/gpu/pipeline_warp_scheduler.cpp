@@ -71,8 +71,44 @@ void WarpScheduler::execute() {
     return;  // No warps available
   }
 
-  // Build available bitmask: bit i set if warp i is available (not suspended)
-  // Match SIMTight: avail = warpQueue & ~suspended
+  // Barrier release logic (matching SIMTight's barrier release unit)
+  // Check if all warps in queue are in barrier, and if so, release them all
+  bool all_in_barrier = true;
+  size_t warps_in_barrier = 0;
+  std::queue<Warp *> temp_check_queue;
+  while (!warp_queue.empty()) {
+    Warp *w = warp_queue.front();
+    warp_queue.pop();
+    temp_check_queue.push(w);
+    
+    if (!w->is_cpu && !w->finished[0]) {  // Only check active GPU warps
+      if (w->in_barrier) {
+        warps_in_barrier++;
+      } else {
+        all_in_barrier = false;
+      }
+    }
+  }
+  
+  // Restore queue
+  warp_queue = std::move(temp_check_queue);
+  
+  // If all warps are in barrier, release them all (matching SIMTight: barrier release unit)
+  if (all_in_barrier && warps_in_barrier > 0) {
+    std::queue<Warp *> temp_release_queue;
+    while (!warp_queue.empty()) {
+      Warp *w = warp_queue.front();
+      warp_queue.pop();
+      if (w->in_barrier && !w->is_cpu) {
+        w->in_barrier = false;  // Release from barrier
+      }
+      temp_release_queue.push(w);
+    }
+    warp_queue = std::move(temp_release_queue);
+  }
+  
+  // Build available bitmask: bit i set if warp i is available (not suspended and not in barrier)
+  // Match SIMTight: avail = warpQueue & ~suspended & ~inBarrier
   uint64_t avail = 0;
   
   // First pass: build available bitmask
@@ -82,7 +118,7 @@ void WarpScheduler::execute() {
     warp_queue.pop();
     temp_queue.push(w);
     
-    if (!w->suspended) {
+    if (!w->suspended && !w->in_barrier) {
       // Set bit at position warp_id
       if (w->warp_id < 64) {
         avail |= (1ULL << w->warp_id);
