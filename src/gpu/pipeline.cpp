@@ -8,7 +8,6 @@ void Pipeline::execute() {
 }
 
 bool Pipeline::has_active_stages() {
-    int i = 0;
     for (auto &stage: stages) {
         if (stage->is_active()) return true;
     }
@@ -24,8 +23,7 @@ void MockPipelineStage::execute() {
     
     Warp *warp = PipelineStage::input_latch->warp;
     if (!warp->is_cpu) {
-      std::string name = "Warp " + std::to_string(warp->warp_id);
-      log("MockPipelineStage", name + " executing");
+      log("MockPipelineStage", "Warp " + std::to_string(warp->warp_id) + " executing");
     }
 
     // Update pipeline latches

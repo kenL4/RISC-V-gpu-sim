@@ -22,7 +22,6 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
                                      size_t access_size, bool is_store) {
   // SIMTight coalescing strategy implementation with iterative processing
   // SIMTight has 32 lanes and 64-byte (512-bit) DRAM beats
-  constexpr size_t NUM_LANES = 32;
   constexpr size_t LOG_LANES = 5;
 
   if (addrs.empty()) {
@@ -153,7 +152,6 @@ int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
                                            size_t access_size) {
   // Count the number of coalesced requests (not bursts)
   // This is used for store access counting in SIMTight (stores count 1 per request)
-  constexpr size_t NUM_LANES = 32;
   constexpr size_t LOG_LANES = 5;
 
   if (addrs.empty()) {

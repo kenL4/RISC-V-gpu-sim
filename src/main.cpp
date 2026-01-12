@@ -124,11 +124,10 @@ int main(int argc, char *argv[]) {
   CoalescingUnit cu(&scratchpad_mem);
   debug_log("Instantiated memory coalescing unit");
 
-  size_t register_count = 32;
-  RegisterFile rf(register_count, NUM_LANES);
-  HostRegisterFile hrf(&rf, register_count);
+  RegisterFile rf(NUM_REGISTERS, NUM_LANES);
+  HostRegisterFile hrf(&rf, NUM_REGISTERS);
   debug_log("Register file instantiated with " +
-            std::to_string(register_count) + " registers");
+            std::to_string(NUM_REGISTERS) + " registers");
 
   // Initialization
   HostGPUControl gpu_controller;
@@ -143,12 +142,6 @@ int main(int argc, char *argv[]) {
   gpu_controller.set_scheduler(
       std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0)));
   gpu_controller.set_pipeline(gpu_pipeline);
-
-  // Get references to stages we need for cycle counting
-  std::shared_ptr<WarpScheduler> gpu_scheduler =
-      std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0));
-  std::shared_ptr<WritebackResume> gpu_writeback =
-      std::dynamic_pointer_cast<WritebackResume>(gpu_pipeline->get_stage(5));
 
   // Execute the threads
   // Matching SIMTight: pipelineActive stays true from kernel launch until all warps terminate
@@ -174,30 +167,29 @@ int main(int argc, char *argv[]) {
   }
 
   std::string output = gpu_controller.get_buffer();
-  if (!Config::instance().isStatsOnly())
+  bool stats_only = Config::instance().isStatsOnly();
+  if (!stats_only) {
     std::cout << std::endl << "[Results]" << std::endl;
-  if (!Config::instance().isStatsOnly())
     std::cout << output;
+  }
   uint64_t sum = std::count(output.begin(), output.end(), '1');
-  if (!Config::instance().isStatsOnly())
+  if (!stats_only) {
     std::cout << ((sum == 0)
                       ? "All passed!"
                       : std::to_string(NUM_LANES * NUM_WARPS - sum) +
                             " passed, " + std::to_string(sum) + " failed")
               << std::endl
               << std::endl;
+  }
 
   std::cout << "[Statistics]" << std::endl;
-  uint64_t cycles = (GPUStatisticsManager::instance().get_gpu_cycles());
-  uint64_t gpu_instrs = (GPUStatisticsManager::instance().get_gpu_instrs());
-  uint64_t cpu_instrs = (GPUStatisticsManager::instance().get_cpu_instrs());
-  double ipc = ((double)gpu_instrs / (double)cycles);
-  uint64_t gpu_dram_accs =
-      (GPUStatisticsManager::instance().get_gpu_dram_accs());
-  uint64_t cpu_dram_accs =
-      (GPUStatisticsManager::instance().get_cpu_dram_accs());
-  uint64_t gpu_retries =
-      (GPUStatisticsManager::instance().get_gpu_retries());
+  uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
+  uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
+  uint64_t cpu_instrs = GPUStatisticsManager::instance().get_cpu_instrs();
+  double ipc = static_cast<double>(gpu_instrs) / static_cast<double>(cycles);
+  uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
+  uint64_t cpu_dram_accs = GPUStatisticsManager::instance().get_cpu_dram_accs();
+  uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
   std::cout << "GPU Cycles: " << cycles << std::endl;
   std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
   std::cout << "CPU Instrs: " << cpu_instrs << std::endl;

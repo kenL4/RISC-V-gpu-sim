@@ -16,21 +16,9 @@ public:
   std::vector<bool> retrying;  // Matching SIMTight's simtRetry: per-thread retry flag
   bool suspended;
   Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
-      : warp_id(warp_id), size(size), is_cpu(is_cpu) {
-    suspended = false;
-
-    pc.resize(size);
-    nesting_level.resize(size);
-    finished.resize(size);
-    retrying.resize(size);
-
-    // Clear the vectors
-    for (int i = 0; i < size; i++) {
-      pc[i] = start_pc;
-      nesting_level[i] = 0;
-      finished[i] = false;
-      retrying[i] = false;
-    }
+      : warp_id(warp_id), size(size), is_cpu(is_cpu), suspended(false),
+        pc(size, start_pc), nesting_level(size, 0), finished(size, false),
+        retrying(size, false) {
   };
 
   bool is_cpu;

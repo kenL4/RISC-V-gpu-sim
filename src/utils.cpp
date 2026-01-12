@@ -18,9 +18,7 @@ void log(std::string name, std::string message) {
 }
 
 void log_error(std::string name, std::string message) {
-  debug_log("**ERROR** "
-            "[" +
-            name + "] " + message);
+  debug_log("**ERROR** [" + name + "] " + message);
 }
 
 std::string operandToString(const llvm::MCOperand &Op) {

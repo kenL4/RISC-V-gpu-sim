@@ -28,6 +28,7 @@ constexpr size_t SIM_CPU_INITIAL_SP = SIM_CPU_STACK_BASE - 8;
 // GPU pipeline configuration
 constexpr size_t NUM_LANES = 32;
 constexpr size_t NUM_WARPS = 64;
+constexpr size_t NUM_REGISTERS = 32;  // RISC-V has 32 general-purpose registers
 
 // For command line options that I pass
 class Config {
