@@ -1439,6 +1439,12 @@ void ExecuteSuspend::execute() {
   std::vector<size_t> active_threads =
       PipelineStage::input_latch->active_threads;
 
+  // Matching SIMTight: count suspension bubble when a suspended warp enters execute stage
+  // This happens when the scheduler chooses a suspended warp (creating a pipeline bubble)
+  if (warp->suspended && !warp->is_cpu) {
+    GPUStatisticsManager::instance().increment_gpu_susps();
+  }
+
   execute_result result = eu->execute(warp, active_threads, inst);
 
   // Handle retry logic (matching SIMTight behavior):

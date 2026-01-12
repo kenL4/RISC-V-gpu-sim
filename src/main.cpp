@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <iomanip>
 #include "cxxopts.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline.hpp"
@@ -83,6 +84,7 @@ int main(int argc, char *argv[]) {
                                            "Turn on CPU debugging logs")(
       "r,regdump", "Dump the register values after each writeback stage")(
       "s,statsonly", "Do not print anything aside from the final stats")(
+      "simtight-format", "Output statistics in SIMTight format (hex, 8 digits)")(
       "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
@@ -98,6 +100,7 @@ int main(int argc, char *argv[]) {
   config.setCPUDebug(result.count("cpu-debug") > 0);
   config.setRegisterDump(result.count("regdump") > 0);
   config.setStatsOnly(result.count("statsonly") > 0);
+  config.setSimtightFormat(result.count("simtight-format") > 0);
 
   std::string filename = result["filename"].as<std::string>();
 
@@ -187,21 +190,42 @@ int main(int argc, char *argv[]) {
               << std::endl;
   }
 
-  std::cout << "[Statistics]" << std::endl;
-  uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
-  uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
-  uint64_t cpu_instrs = GPUStatisticsManager::instance().get_cpu_instrs();
-  double ipc = static_cast<double>(gpu_instrs) / static_cast<double>(cycles);
-  uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
-  uint64_t cpu_dram_accs = GPUStatisticsManager::instance().get_cpu_dram_accs();
-  uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
-  std::cout << "GPU Cycles: " << cycles << std::endl;
-  std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
-  std::cout << "CPU Instrs: " << cpu_instrs << std::endl;
-  std::cout << "IPC: " << ipc << std::endl;
-  std::cout << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
-  std::cout << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
-  std::cout << "GPU Retries: " << gpu_retries << std::endl;
+  bool simtight_format = config.isSimtightFormat();
+  
+  if (simtight_format) {
+    // SIMTight format: hex, 8 digits, specific labels
+    uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
+    uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
+    uint64_t gpu_susps = GPUStatisticsManager::instance().get_gpu_susps();
+    uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
+    uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
+    
+    // Format as hex with 8 digits (matching SIMTight's puthex output)
+    std::cout << "Cycles: " << std::hex << std::setfill('0') << std::setw(8) << cycles << std::dec << std::endl;
+    std::cout << "Instrs: " << std::hex << std::setfill('0') << std::setw(8) << gpu_instrs << std::dec << std::endl;
+    std::cout << "Susps: " << std::hex << std::setfill('0') << std::setw(8) << gpu_susps << std::dec << std::endl;
+    std::cout << "Retries: " << std::hex << std::setfill('0') << std::setw(8) << gpu_retries << std::dec << std::endl;
+    std::cout << "DRAMAccs: " << std::hex << std::setfill('0') << std::setw(8) << gpu_dram_accs << std::dec << std::endl;
+  } else {
+    // Original format
+    std::cout << "[Statistics]" << std::endl;
+    uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
+    uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
+    uint64_t cpu_instrs = GPUStatisticsManager::instance().get_cpu_instrs();
+    double ipc = static_cast<double>(gpu_instrs) / static_cast<double>(cycles);
+    uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
+    uint64_t cpu_dram_accs = GPUStatisticsManager::instance().get_cpu_dram_accs();
+    uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
+    uint64_t gpu_susps = GPUStatisticsManager::instance().get_gpu_susps();
+    std::cout << "GPU Cycles: " << cycles << std::endl;
+    std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
+    std::cout << "CPU Instrs: " << cpu_instrs << std::endl;
+    std::cout << "IPC: " << ipc << std::endl;
+    std::cout << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
+    std::cout << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
+    std::cout << "GPU Retries: " << gpu_retries << std::endl;
+    std::cout << "GPU Susps: " << gpu_susps << std::endl;
+  }
 
   delete cpu_pipeline;
   delete gpu_pipeline;
