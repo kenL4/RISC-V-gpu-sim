@@ -54,15 +54,21 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   writeback_stage->insert_warp = insert_warp_callback;
 
   // Initialize latches (7 stages = 7 latches)
-  // Using array for better safety and automatic cleanup
-  std::array<PipelineLatch, 7> latches;
+  // Note: Latches must persist for the lifetime of the pipeline, so we use heap allocation
+  // The Pipeline should ideally own these, but for now we allocate them here
+  PipelineLatch *latches[7];
+  for (int i = 0; i < 7; i++) {
+    latches[i] = new PipelineLatch();
+  }
   
   // Connect latches in a circular pattern (stage N output -> stage N+1 input)
-  constexpr int NUM_STAGES = 7;
-  for (int i = 0; i < NUM_STAGES; i++) {
-    p->get_stage(i)->set_latches(&latches[(i + NUM_STAGES - 1) % NUM_STAGES], 
-                                  &latches[i]);
-  }
+  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
+  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
+  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
+  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
+  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch
+  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
+  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
 
   return p;
 }
