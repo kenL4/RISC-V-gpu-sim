@@ -17,7 +17,7 @@ public:
   // Control
   void launch_kernel();
   bool is_gpu_active();
-  void set_pipeline(Pipeline *pipeline) { this->pipeline = pipeline; }
+  void set_pipeline(Pipeline *p) { pipeline = p; }
 
   // I/O
   void buffer_data(char val);

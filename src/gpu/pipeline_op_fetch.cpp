@@ -5,27 +5,27 @@ OperandFetch::OperandFetch() {
 }
 
 void OperandFetch::execute() {
-    if (!PipelineStage::input_latch->updated) return;
+    if (!input_latch->updated) return;
     
-    Warp *warp = PipelineStage::input_latch->warp;
-    llvm::MCInst *inst = &(PipelineStage::input_latch->inst);
+    Warp *warp = input_latch->warp;
+    const llvm::MCInst &inst = input_latch->inst;
 
-    PipelineStage::input_latch->updated = false;
-    PipelineStage::output_latch->updated = true;
-    PipelineStage::output_latch->warp = warp;
-    PipelineStage::output_latch->active_threads = PipelineStage::input_latch->active_threads;
-    PipelineStage::output_latch->inst = PipelineStage::input_latch->inst;
+    input_latch->updated = false;
+    output_latch->updated = true;
+    output_latch->warp = warp;
+    output_latch->active_threads = input_latch->active_threads;
+    output_latch->inst = inst;
     
     if (!warp->is_cpu) {
       std::stringstream op_stream;
-      for (llvm::MCOperand op : inst->getOperands()) {
+      for (const auto &op : inst.getOperands()) {
           op_stream << operandToString(op) << " ";
       }
-      std::string name = "Warp " + std::to_string(warp->warp_id);
-      log("Operand Fetch", name + " using operands " + op_stream.str());
+      log("Operand Fetch", "Warp " + std::to_string(warp->warp_id) + 
+          " using operands " + op_stream.str());
     }
 };
 
 bool OperandFetch::is_active() {
-    return PipelineStage::input_latch->updated;
+    return input_latch->updated;
 }

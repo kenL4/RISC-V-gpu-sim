@@ -20,4 +20,5 @@ public:
 private:
     uint64_t registers_per_warp;
     size_t thread_count;
+    void ensure_warp_initialized(uint64_t warp_id);
 };

@@ -10,30 +10,22 @@ int get_register_idx(llvm::MCRegister reg) {
     return reg - llvm::RISCV::X0;
 }
 
-int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
-    if (warp_id_to_registers.count(warp_id) <= 0) {
+void RegisterFile::ensure_warp_initialized(uint64_t warp_id) {
+    if (warp_id_to_registers.find(warp_id) == warp_id_to_registers.end()) {
         warp_id_to_registers[warp_id].resize(registers_per_warp);
         for (auto &reg_vec : warp_id_to_registers[warp_id]) {
-            reg_vec.resize(thread_count, 0);
-            for (int i = 0 ; i< reg_vec.size(); i++) {
-                reg_vec[i] = 0;
-            }
+            reg_vec.resize(thread_count, 0);  // resize with 0 already initializes
         }
     }
+}
 
+int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
+    ensure_warp_initialized(warp_id);
     return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }
 
 void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value) {
-    if (warp_id_to_registers.count(warp_id) <= 0) {
-        warp_id_to_registers[warp_id].resize(registers_per_warp);
-        for (auto &reg_vec : warp_id_to_registers[warp_id]) {
-            reg_vec.resize(thread_count, 0);
-            for (int i = 0 ; i< reg_vec.size(); i++) {
-                reg_vec[i] = 0;
-            }
-        }
-    }
+    ensure_warp_initialized(warp_id);
 
     // Don't write to X0 (zero register) - it's always 0
     if (reg != llvm::RISCV::X0) {
@@ -47,20 +39,21 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
 }
 
 std::optional<int> RegisterFile::get_csr(uint64_t warp_id, int thread, int csr) {
-    if (warp_id_to_csr.count(warp_id) <= 0) {
+    if (warp_id_to_csr.find(warp_id) == warp_id_to_csr.end()) {
         warp_id_to_csr[warp_id].resize(thread_count);
     }
 
-    if (warp_id_to_csr[warp_id][thread].find(csr) == warp_id_to_csr[warp_id][thread].end()) {
-        // We return a null optional type before definition
+    auto &csr_map = warp_id_to_csr[warp_id][thread];
+    auto it = csr_map.find(csr);
+    if (it == csr_map.end()) {
         return {};
     }
 
-    return warp_id_to_csr[warp_id][thread][csr];
+    return it->second;
 }
 
 void RegisterFile::set_csr(uint64_t warp_id, int thread, int csr, int value) {
-    if (warp_id_to_csr.count(warp_id) <= 0) {
+    if (warp_id_to_csr.find(warp_id) == warp_id_to_csr.end()) {
         warp_id_to_csr[warp_id].resize(thread_count);
     }
 
@@ -72,7 +65,7 @@ RegisterFile::~RegisterFile() {
 }
 
 void RegisterFile::pretty_print(uint64_t warp_id) {
-    if (warp_id_to_registers.count(warp_id) == 0) {
+    if (warp_id_to_registers.find(warp_id) == warp_id_to_registers.end()) {
         std::cout << "No registers for warp " << warp_id << "\n";
         return;
     }

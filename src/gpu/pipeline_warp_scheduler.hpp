@@ -14,7 +14,7 @@ public:
                 bool start_active = true);
   void execute() override;
   bool is_active() override;
-  void set_active(bool active) { this->active = active; }
+  void set_active(bool a) { active = a; }
   void insert_warp(Warp *warp);
   bool did_issue_warp() const { return warp_issued_this_cycle; }
 

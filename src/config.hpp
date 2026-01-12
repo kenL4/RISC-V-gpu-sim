@@ -33,6 +33,7 @@ constexpr size_t NUM_REGISTERS = 32;  // RISC-V has 32 general-purpose registers
 // For command line options that I pass
 class Config {
 public:
+  // C++17 inline static for thread-safe singleton
   static Config &instance() {
     static Config inst;
     return inst;

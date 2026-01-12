@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include "cxxopts.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline.hpp"
@@ -42,29 +43,26 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   std::shared_ptr<WritebackResume> writeback_stage =
       std::dynamic_pointer_cast<WritebackResume>(p->get_stage(6));
   
-  execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
+  // Set up warp insertion callback (used by both execute and writeback stages)
+  auto insert_warp_callback = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
   };
+  execute_stage->insert_warp = insert_warp_callback;
   
   // Connect WritebackResume to ExecutionUnit and set up warp insertion
   writeback_stage->set_execution_unit(execute_stage->get_execution_unit());
-  writeback_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
-    ws->insert_warp(warp);
-  };
+  writeback_stage->insert_warp = insert_warp_callback;
 
   // Initialize latches (7 stages = 7 latches)
-  PipelineLatch *latches[7];
-  for (int i = 0; i < 7; i++) {
-    latches[i] = new PipelineLatch();
+  // Using array for better safety and automatic cleanup
+  std::array<PipelineLatch, 7> latches;
+  
+  // Connect latches in a circular pattern (stage N output -> stage N+1 input)
+  constexpr int NUM_STAGES = 7;
+  for (int i = 0; i < NUM_STAGES; i++) {
+    p->get_stage(i)->set_latches(&latches[(i + NUM_STAGES - 1) % NUM_STAGES], 
+                                  &latches[i]);
   }
-
-  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
-  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
-  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
-  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
-  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch
-  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
-  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
 
   return p;
 }
@@ -89,10 +87,11 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  Config::instance().setDebug(result.count("debug") > 0);
-  Config::instance().setCPUDebug(result.count("cpu-debug") > 0);
-  Config::instance().setRegisterDump(result.count("regdump") > 0);
-  Config::instance().setStatsOnly(result.count("statsonly") > 0);
+  auto &config = Config::instance();
+  config.setDebug(result.count("debug") > 0);
+  config.setCPUDebug(result.count("cpu-debug") > 0);
+  config.setRegisterDump(result.count("regdump") > 0);
+  config.setStatsOnly(result.count("statsonly") > 0);
 
   std::string filename = result["filename"].as<std::string>();
 
@@ -137,7 +136,7 @@ int main(int argc, char *argv[]) {
       initialize_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller, true);
 
   gpu_pipeline->set_debug(true);
-  cpu_pipeline->set_debug(Config::instance().isCPUDebug());
+  cpu_pipeline->set_debug(config.isCPUDebug());
 
   gpu_controller.set_scheduler(
       std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0)));
@@ -167,7 +166,7 @@ int main(int argc, char *argv[]) {
   }
 
   std::string output = gpu_controller.get_buffer();
-  bool stats_only = Config::instance().isStatsOnly();
+  bool stats_only = config.isStatsOnly();
   if (!stats_only) {
     std::cout << std::endl << "[Results]" << std::endl;
     std::cout << output;
