@@ -12,10 +12,9 @@ CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
 }
 
 bool CoalescingUnit::can_put() {
-  // Matching SIMTight: memReqs.canPut returns false when queue is full
-  // Check total capacity: pending requests + requests in pipeline
-  size_t total_queue_size = pending_request_queue.size() + pipeline_queue.size();
-  return total_queue_size < MEM_REQ_QUEUE_CAPACITY;
+  // Matching SIMTight: memReqs.canPut checks only the INPUT queue capacity (32)
+  // The pipeline capacity (inflightCount = 4) is checked separately when consuming from input queue
+  return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
 }
 
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,

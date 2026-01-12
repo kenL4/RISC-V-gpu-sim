@@ -16,7 +16,8 @@ constexpr size_t SIM_DIV_LATENCY = 32;
 constexpr size_t SIM_REM_LATENCY = 32;  // Same as division (uses same unit)
 
 // Memory request queue capacity (matching SIMTight: makeSizedQueueCore 5 = 2^5 = 32)
-constexpr size_t MEM_REQ_QUEUE_CAPACITY = 32;
+// This is the INPUT queue capacity - the pipeline tracking (inflightCount) has separate capacity 4
+constexpr size_t MEM_REQ_QUEUE_CAPACITY = 32;  // Matching SIMTight: memReqsQueue input queue capacity
 
 constexpr size_t SIM_SHARED_SRAM_BASE = 0xBFFF0000;
 constexpr size_t SIM_SIMT_STACK_BASE = 0xC0000000;

@@ -4,6 +4,7 @@
 
 /*
  * An individual warp. This maintains the per-warp state
+ * Matching SIMTight's SIMTThreadState structure
  */
 class Warp {
 public:
@@ -12,22 +13,23 @@ public:
   std::vector<uint64_t> pc;
   std::vector<uint64_t> nesting_level;
   std::vector<bool> finished;
+  std::vector<bool> retrying;  // Matching SIMTight's simtRetry: per-thread retry flag
   bool suspended;
-  bool retrying;  // Matching SIMTight's simtRetry flag - warp is retrying an instruction
   Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
       : warp_id(warp_id), size(size), is_cpu(is_cpu) {
     suspended = false;
-    retrying = false;
 
     pc.resize(size);
     nesting_level.resize(size);
     finished.resize(size);
+    retrying.resize(size);
 
     // Clear the vectors
     for (int i = 0; i < size; i++) {
       pc[i] = start_pc;
       nesting_level[i] = 0;
       finished[i] = false;
+      retrying[i] = false;
     }
   };
 

@@ -1348,18 +1348,24 @@ void ExecuteSuspend::execute() {
   // - Warp keeps retrying the same instruction until canPut becomes true
   // - Instruction is NOT counted
   // - Retries are counted every cycle the warp is retrying
+  // Matching SIMTight: retry is per-thread (per-lane), stored in thread state
   if (!result.success && !warp->suspended && !warp->is_cpu) {
     // Retry needed: stay in execute stage, count retry, don't count instruction
     // PC was NOT updated in instruction function, so it stays the same
     GPUStatisticsManager::instance().increment_gpu_retries();
-    warp->retrying = true;
+    // Set retry flag for all active threads (matching SIMTight: retryWire.val per-lane)
+    for (auto thread : active_threads) {
+      warp->retrying[thread] = true;
+    }
     // Warp stays in execute stage - keep input_latch updated so it's processed again next cycle (matches SIMTight: retryWire.val keeps warp in execute with same PC)
     PipelineStage::input_latch->updated = true;
     PipelineStage::output_latch->updated = false;  // No output on retry
     return;  // Don't process further - warp stays in execute and will retry next cycle
   } else {
-    // Instruction succeeded or warp was suspended - clear retry flag
-    warp->retrying = false;
+    // Instruction succeeded or warp was suspended - clear retry flag for all active threads
+    for (auto thread : active_threads) {
+      warp->retrying[thread] = false;
+    }
   }
 
   // Count instructions only if successful and not retried (matching SIMTight:
