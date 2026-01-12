@@ -15,6 +15,8 @@ CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
 bool CoalescingUnit::can_put() {
   // Matching SIMTight: memReqs.canPut checks only the INPUT queue capacity (32)
   // The pipeline capacity (inflightCount = 4) is checked separately when consuming from input queue
+  // In SIMTight, canPut only checks memReqsQueue.notFull (input queue), not the pipeline capacity
+  // This matches the behavior where retries occur when the input queue is full
   return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
 }
 
@@ -318,6 +320,7 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.bytes = bytes;
   req.is_store = false;
   req.is_atomic = false;
+  req.is_fence = false;
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
@@ -361,6 +364,7 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   req.bytes = bytes;
   req.is_store = true;
   req.is_atomic = false;
+  req.is_fence = false;
   req.store_values = vals;
   pending_request_queue.push(req);
   
@@ -391,6 +395,35 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   blocked_warps[warp] = latency;
 }
 
+void CoalescingUnit::fence(Warp *warp) {
+  // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
+  // Matching SIMTight: FENCE sends memGlobalFenceOp to memory unit and suspends warp
+  
+  // Queue the fence request (matching SIMTight: requests go into queue before processing)
+  MemRequest req;
+  req.warp = warp;
+  req.addrs = {};  // Fence doesn't need addresses
+  req.bytes = 0;
+  req.is_store = false;
+  req.is_atomic = false;
+  req.is_fence = true;
+  req.active_threads = {};
+  pending_request_queue.push(req);
+  
+  // Suspend warp immediately (fence will be processed in tick(), warp resumes when complete)
+  warp->suspended = true;
+  
+  // Fence latency: need to account for time request spends in pending queue + pipeline
+  // The latency counter starts decrementing immediately when set, so we need to be conservative
+  // Worst case: request waits in pending queue (could be many cycles if pipeline is full),
+  // then goes through pipeline (COALESCING_PIPELINE_DEPTH cycles)
+  // To be safe, use a latency that accounts for worst-case queue delay
+  // Using MEM_REQ_QUEUE_CAPACITY as worst-case queue wait time seems excessive,
+  // but we need to ensure the warp doesn't resume before the fence actually completes
+  // For now, use 2 * COALESCING_PIPELINE_DEPTH to account for queue delay + pipeline
+  blocked_warps[warp] = 2 * COALESCING_PIPELINE_DEPTH;
+}
+
 void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
                                  size_t bytes, unsigned int rd_reg,
                                  const std::vector<int> &add_values,
@@ -405,6 +438,7 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   req.bytes = bytes;
   req.is_store = false;
   req.is_atomic = true;
+  req.is_fence = false;
   req.atomic_add_values = add_values;
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
@@ -546,7 +580,15 @@ void CoalescingUnit::tick() {
 }
 
 void CoalescingUnit::process_mem_request(const MemRequest &req) {
-  if (req.is_atomic) {
+  if (req.is_fence) {
+    // Process memory fence: ensure all previous memory operations complete
+    // Matching SIMTight: memGlobalFenceOp ensures memory ordering
+    // In our simple model, fence just needs to go through pipeline
+    // No actual memory access needed - just ensures ordering
+    // Warp was already added to blocked_warps when request was queued
+    // The latency counter will reach 0 and warp will be resumed via get_resumable_warp()
+    // No additional processing needed - fence is complete when it exits pipeline
+  } else if (req.is_atomic) {
     // Process atomic add: read old value, add to it, write back, return old value
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {

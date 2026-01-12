@@ -13,6 +13,7 @@ struct MemRequest {
   size_t bytes;
   bool is_store;
   bool is_atomic;  // Is this an atomic operation?
+  bool is_fence;   // Is this a memory fence operation?
   std::vector<int> store_values;  // Only used for stores
   std::vector<int> atomic_add_values;  // Only used for atomic add operations
   unsigned int rd_reg;  // Destination register for loads and atomic operations
@@ -40,6 +41,10 @@ public:
   void atomic_add(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
                   unsigned int rd_reg, const std::vector<int> &add_values,
                   const std::vector<size_t> &active_threads);
+  
+  // Queue a memory fence request (returns immediately, warp suspended until fence completes)
+  // Matching SIMTight: FENCE sends memGlobalFenceOp to memory unit
+  void fence(Warp *warp);
   
   bool is_busy();
   bool is_busy_for_pipeline(bool is_cpu_pipeline);

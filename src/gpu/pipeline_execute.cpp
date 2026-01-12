@@ -181,6 +181,13 @@ execute_result ExecutionUnit::execute(Warp *warp,
     }
   } else if (mnemonic == "FENCE") {
     res.write_required = fence(warp, active_threads, &inst);
+    // If memory operation returns false AND warp is not suspended, queue was full - need to retry
+    // If memory operation returns false AND warp is suspended, operation succeeded (resume happens later)
+    // Matching SIMTight: retry when queue full (warp not suspended), suspend when operation accepted
+    if (!res.write_required && !warp->suspended) {
+      res.success = false;
+      res.counted = false;
+    }
   } else if (mnemonic == "ECALL") {
     res.write_required = ecall(warp, active_threads, &inst);
   } else if (mnemonic == "EBREAK") {
@@ -1117,13 +1124,22 @@ bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
 
 bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
                           MCInst *in) {
-  // FENCE is currently a no-op in this simulator as we don't model
-  // complex memory consistency or out-of-order execution that requires it.
-  // We just advance the PC.
+  // Matching SIMTight: check canPut before accepting memory fence request
+  // If queue is full, return false to trigger retry (PC should NOT advance)
+  if (!cu->can_put()) {
+    return false;  // Memory system busy, need to retry - PC stays unchanged
+  }
+
+  // Queue the fence request (warp will be suspended, resumes when fence completes)
+  cu->fence(warp);
+
+  // Advance PC only after successful memory fence request (matching SIMTight)
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
-  return active_threads.size() > 0;
+
+  // Return false (no immediate write required - fence completes on resume)
+  return false;
 }
 
 bool ExecutionUnit::ecall(Warp *warp, std::vector<size_t> active_threads,

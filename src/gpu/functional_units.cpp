@@ -112,9 +112,12 @@ void MulUnit::tick() {
     if (op.cycles_remaining == 0) {
       if (result_queue.size() < RESULT_QUEUE_CAPACITY) {
         result_queue.push(op);
+      } else {
+        // Result queue is full - keep operation in pipeline for next cycle
+        // This shouldn't happen if issue() is working correctly, but handle gracefully
+        // Matching SIMTight: when result queue is full, stall is set and stages replay
+        pipeline.push(op);  // Keep in pipeline, will try again next cycle
       }
-      // If result queue is full, the operation stays in pipeline (this shouldn't happen
-      // if issue() is working correctly, but handle it gracefully)
     } else {
       // Still processing, keep in pipeline
       pipeline.push(op);
