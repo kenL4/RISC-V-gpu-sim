@@ -25,6 +25,10 @@ constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spi
 constexpr size_t SIM_CPU_STACK_BASE = SIM_SHARED_SRAM_BASE - SIM_REG_SPILL_SIZE;
 constexpr size_t SIM_CPU_INITIAL_SP = SIM_CPU_STACK_BASE - 8;
 
+// GPU pipeline configuration
+constexpr size_t NUM_LANES = 32;
+constexpr size_t NUM_WARPS = 64;
+
 // For command line options that I pass
 class Config {
 public:

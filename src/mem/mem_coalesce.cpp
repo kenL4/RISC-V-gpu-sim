@@ -2,6 +2,7 @@
 #include "config.hpp"
 #include <algorithm>
 #include <iostream>
+#include <set>
 
 // Use centralized config values from config.hpp
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)

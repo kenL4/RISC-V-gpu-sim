@@ -1,6 +1,5 @@
 #include "host_gpu_control.hpp"
-
-#define NUM_LANES 32
+#include "config.hpp"
 
 HostGPUControl::HostGPUControl()
     : kernel_pc(0), arg_ptr(0), dims(0), gpu_active(false), buf("") {}
@@ -16,7 +15,7 @@ uint64_t HostGPUControl::get_arg_ptr() { return arg_ptr; }
 
 void HostGPUControl::launch_kernel() {
   int warp_size = NUM_LANES;
-  int num_warps = 64;
+  int num_warps = NUM_WARPS;
 
   for (int i = 0; i < num_warps; i++) {
     Warp *warp = new Warp(i, warp_size, kernel_pc, false);
@@ -34,14 +33,7 @@ void HostGPUControl::launch_kernel() {
 }
 
 bool HostGPUControl::is_gpu_active() {
-
-  if (gpu_active) {
-    if (!scheduler->is_active()) {
-      return scheduler->is_active();
-    }
-    return true;
-  }
-  return false;
+  return gpu_active && scheduler->is_active();
 }
 
 void HostGPUControl::buffer_data(char val) { buf += val; }

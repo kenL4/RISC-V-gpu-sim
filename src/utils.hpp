@@ -1,12 +1,18 @@
 #pragma once
 
 #include <algorithm>
-#include <bits/stdc++.h>
 #include <chrono>
 #include <cinttypes>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include <map>
+#include <memory>
+#include <optional>
+#include <queue>
+#include <string>
+#include <vector>
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -23,12 +29,6 @@
 #include "llvm/Support/Format.h"
 #define GET_REGINFO_ENUM
 #include "gen/llvm_riscv_registers.h"
-#include <map>
-#include <memory>
-#include <optional>
-#include <queue>
-#include <string>
-#include <vector>
 
 #include "config.hpp"
 #include "parser.hpp"

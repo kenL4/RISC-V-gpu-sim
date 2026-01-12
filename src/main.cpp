@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "cxxopts.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline.hpp"
@@ -14,24 +15,25 @@
 #include "mem/mem_instr.hpp"
 #include "utils.hpp"
 
-#define NUM_LANES 32
-#define NUM_WARPS 64
-
-// For simplicity, the CPU here is for now modelled as a 1x1 GPU
-Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
-                                  RegisterFile *rf, LLVMDisassembler *disasm,
-                                  HostGPUControl *gpu_controller) {
+// Initialize pipeline (CPU is modelled as 1x1 GPU for simplicity)
+Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
+                              RegisterFile *rf, LLVMDisassembler *disasm,
+                              HostGPUControl *gpu_controller, bool is_cpu) {
   Pipeline *p = new Pipeline();
 
   // Construct stages (matching SIMTight's 7-stage pipeline)
-  p->add_stage<WarpScheduler>(1, 1, im->get_base_addr());  // Stage 0
+  if (is_cpu) {
+    p->add_stage<WarpScheduler>(1, 1, im->get_base_addr());  // Stage 0: CPU = 1x1
+  } else {
+    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), false);  // Stage 0: GPU
+  }
   p->add_stage<ActiveThreadSelection>();                     // Stage 1
   p->add_stage<InstructionFetch>(im, disasm);                // Stage 2
   p->add_stage<OperandFetch>();                              // Stage 3
-  p->add_stage<OperandLatch>();                              // Stage 4 (new)
+  p->add_stage<OperandLatch>();                              // Stage 4
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
                                gpu_controller);              // Stage 5
-  p->add_stage<WritebackResume>(cu, rf, true);              // Stage 6 (true = CPU pipeline)
+  p->add_stage<WritebackResume>(cu, rf, is_cpu);            // Stage 6
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -60,56 +62,7 @@ Pipeline *initialize_cpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
   p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
   p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
-  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch (new)
-  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
-  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
-
-  return p;
-}
-
-Pipeline *initialize_gpu_pipeline(InstructionMemory *im, CoalescingUnit *cu,
-                                  RegisterFile *rf, LLVMDisassembler *disasm,
-                                  HostGPUControl *gpu_controller) {
-  Pipeline *p = new Pipeline();
-
-  // Construct stages (matching SIMTight's 7-stage pipeline)
-  p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), false);  // Stage 0
-  p->add_stage<ActiveThreadSelection>();                                           // Stage 1
-  p->add_stage<InstructionFetch>(im, disasm);                                      // Stage 2
-  p->add_stage<OperandFetch>();                                                    // Stage 3
-  p->add_stage<OperandLatch>();                                                    // Stage 4 (new)
-  p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
-                               gpu_controller);                                    // Stage 5
-  p->add_stage<WritebackResume>(cu, rf, false);                                   // Stage 6 (false = GPU pipeline)
-
-  std::shared_ptr<WarpScheduler> warp_scheduler_stage =
-      std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
-  std::shared_ptr<ExecuteSuspend> execute_stage =
-      std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(5));
-  std::shared_ptr<WritebackResume> writeback_stage =
-      std::dynamic_pointer_cast<WritebackResume>(p->get_stage(6));
-  
-  execute_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
-    ws->insert_warp(warp);
-  };
-  
-  // Connect WritebackResume to ExecutionUnit and set up warp insertion
-  writeback_stage->set_execution_unit(execute_stage->get_execution_unit());
-  writeback_stage->insert_warp = [ws = warp_scheduler_stage](Warp *warp) {
-    ws->insert_warp(warp);
-  };
-
-  // Initialize latches (7 stages = 7 latches)
-  PipelineLatch *latches[7];
-  for (int i = 0; i < 7; i++) {
-    latches[i] = new PipelineLatch();
-  }
-
-  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
-  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
-  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
-  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
-  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch (new)
+  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch
   p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
   p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
 
@@ -180,9 +133,9 @@ int main(int argc, char *argv[]) {
   // Initialization
   HostGPUControl gpu_controller;
   Pipeline *gpu_pipeline =
-      initialize_gpu_pipeline(&tcim, &cu, &rf, &disasm, &gpu_controller);
+      initialize_pipeline(&tcim, &cu, &rf, &disasm, &gpu_controller, false);
   Pipeline *cpu_pipeline =
-      initialize_cpu_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller);
+      initialize_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller, true);
 
   gpu_pipeline->set_debug(true);
   cpu_pipeline->set_debug(Config::instance().isCPUDebug());
@@ -202,11 +155,6 @@ int main(int argc, char *argv[]) {
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages() ||
          gpu_pipeline->is_pipeline_active()) {
-
-    if (Config::instance().isDebug()) {
-      static uint64_t cycle = 0;
-      cycle++;
-    }
     
     cpu_pipeline->execute();
     gpu_pipeline->execute();
@@ -230,12 +178,7 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl << "[Results]" << std::endl;
   if (!Config::instance().isStatsOnly())
     std::cout << output;
-  uint64_t sum = 0;
-  for (int i = 0; i < output.size(); i++) {
-    if (output[i] == '1') {
-      sum += 1;
-    }
-  }
+  uint64_t sum = std::count(output.begin(), output.end(), '1');
   if (!Config::instance().isStatsOnly())
     std::cout << ((sum == 0)
                       ? "All passed!"

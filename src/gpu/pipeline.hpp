@@ -77,8 +77,6 @@ protected:
   bool debug_enabled = true;
 };
 
-#include "pipeline.hpp"
-
 /*
  * The Pipeline class represents a series of computation stages
  * that each warp will pass through.
