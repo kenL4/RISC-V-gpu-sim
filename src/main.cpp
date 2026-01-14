@@ -84,7 +84,6 @@ int main(int argc, char *argv[]) {
                                            "Turn on CPU debugging logs")(
       "r,regdump", "Dump the register values after each writeback stage")(
       "s,statsonly", "Do not print anything aside from the final stats")(
-      "simtight-format", "Output statistics in SIMTight format (hex, 8 digits)")(
       "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
@@ -128,6 +127,20 @@ int main(int argc, char *argv[]) {
             std::to_string(tcim.get_base_addr()));
 
   DataMemory scratchpad_mem;
+  
+  // Initialize data memory with sections from ELF file (rodata, data, etc.)
+  for (const auto& section : out.data_sections) {
+    uint64_t addr = section.first;
+    const std::vector<uint8_t>& data = section.second;
+    for (size_t i = 0; i < data.size(); i++) {
+      // Store each byte individually (store function handles little-endian, but for 1 byte it's fine)
+      scratchpad_mem.store(addr + i, 1, static_cast<uint64_t>(data[i]));
+    }
+    debug_log("Loaded data section at 0x" + 
+              std::to_string(addr) + " (" + 
+              std::to_string(data.size()) + " bytes)");
+  }
+  
   debug_log("Instantiated memory scratchpad for the SM");
   CoalescingUnit cu(&scratchpad_mem);
   debug_log("Instantiated memory coalescing unit");
@@ -175,57 +188,11 @@ int main(int argc, char *argv[]) {
   }
 
   std::string output = gpu_controller.get_buffer();
-  bool stats_only = config.isStatsOnly();
-  if (!stats_only) {
-    std::cout << std::endl << "[Results]" << std::endl;
-    std::cout << output;
+  bool statsOnly = config.isStatsOnly();
+  if (!statsOnly) {
+    std::cout << "[Output]" << std::endl;
   }
-  uint64_t sum = std::count(output.begin(), output.end(), '1');
-  if (!stats_only) {
-    std::cout << ((sum == 0)
-                      ? "All passed!"
-                      : std::to_string(NUM_LANES * NUM_WARPS - sum) +
-                            " passed, " + std::to_string(sum) + " failed")
-              << std::endl
-              << std::endl;
-  }
-
-  bool simtight_format = config.isSimtightFormat();
-  
-  if (simtight_format) {
-    // SIMTight format: hex, 8 digits, specific labels
-    uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
-    uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
-    uint64_t gpu_susps = GPUStatisticsManager::instance().get_gpu_susps();
-    uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
-    uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
-    
-    // Format as hex with 8 digits (matching SIMTight's puthex output)
-    std::cout << "Cycles: " << std::hex << std::setfill('0') << std::setw(8) << cycles << std::dec << std::endl;
-    std::cout << "Instrs: " << std::hex << std::setfill('0') << std::setw(8) << gpu_instrs << std::dec << std::endl;
-    std::cout << "Susps: " << std::hex << std::setfill('0') << std::setw(8) << gpu_susps << std::dec << std::endl;
-    std::cout << "Retries: " << std::hex << std::setfill('0') << std::setw(8) << gpu_retries << std::dec << std::endl;
-    std::cout << "DRAMAccs: " << std::hex << std::setfill('0') << std::setw(8) << gpu_dram_accs << std::dec << std::endl;
-  } else {
-    // Original format
-    std::cout << "[Statistics]" << std::endl;
-    uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
-    uint64_t gpu_instrs = GPUStatisticsManager::instance().get_gpu_instrs();
-    uint64_t cpu_instrs = GPUStatisticsManager::instance().get_cpu_instrs();
-    double ipc = static_cast<double>(gpu_instrs) / static_cast<double>(cycles);
-    uint64_t gpu_dram_accs = GPUStatisticsManager::instance().get_gpu_dram_accs();
-    uint64_t cpu_dram_accs = GPUStatisticsManager::instance().get_cpu_dram_accs();
-    uint64_t gpu_retries = GPUStatisticsManager::instance().get_gpu_retries();
-    uint64_t gpu_susps = GPUStatisticsManager::instance().get_gpu_susps();
-    std::cout << "GPU Cycles: " << cycles << std::endl;
-    std::cout << "GPU Instrs: " << gpu_instrs << std::endl;
-    std::cout << "CPU Instrs: " << cpu_instrs << std::endl;
-    std::cout << "IPC: " << ipc << std::endl;
-    std::cout << "GPU DRAMAccs: " << gpu_dram_accs << std::endl;
-    std::cout << "CPU DRAMAccs: " << cpu_dram_accs << std::endl;
-    std::cout << "GPU Retries: " << gpu_retries << std::endl;
-    std::cout << "GPU Susps: " << gpu_susps << std::endl;
-  }
+  std::cout << output;
 
   delete cpu_pipeline;
   delete gpu_pipeline;

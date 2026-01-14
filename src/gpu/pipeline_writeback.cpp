@@ -30,7 +30,7 @@ void WritebackResume::execute() {
         // Write back results before removing from completed_operations
         for (size_t thread : active_threads) {
           int result = execution_unit->get_mul_unit().get_result(mul_warp, thread);
-          rf->set_register(mul_warp->warp_id, thread, rd, result);
+          rf->set_register(mul_warp->warp_id, thread, rd, result, mul_warp->is_cpu);
         }
         
         // Now remove from completed_operations
@@ -61,7 +61,7 @@ void WritebackResume::execute() {
         // Write back results before removing from completed_operations
         for (size_t thread : active_threads) {
           int result = execution_unit->get_div_unit().get_result(div_warp, thread);
-          rf->set_register(div_warp->warp_id, thread, rd, result);
+          rf->set_register(div_warp->warp_id, thread, rd, result, div_warp->is_cpu);
         }
         
         // Now remove from completed_operations
@@ -113,7 +113,7 @@ void WritebackResume::execute() {
       // Write load results to registers
       unsigned int rd_reg = load_results.first;
       for (const auto &[thread_id, value] : load_results.second) {
-        rf->set_register(warp->warp_id, thread_id, rd_reg, value);
+        rf->set_register(warp->warp_id, thread_id, rd_reg, value, warp->is_cpu);
       }
     }
     

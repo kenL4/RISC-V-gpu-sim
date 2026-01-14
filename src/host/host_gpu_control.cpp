@@ -2,7 +2,7 @@
 #include "config.hpp"
 
 HostGPUControl::HostGPUControl()
-    : kernel_pc(0), arg_ptr(0), dims(0), gpu_active(false), buf("") {}
+    : kernel_pc(0), arg_ptr(0), dims(0), gpu_active(false), buf(""), stat_value(0U) {}
 
 void HostGPUControl::set_scheduler(std::shared_ptr<WarpScheduler> scheduler) {
   this->scheduler = scheduler;
@@ -36,3 +36,6 @@ bool HostGPUControl::is_gpu_active() {
 
 void HostGPUControl::buffer_data(char val) { buf += val; }
 std::string HostGPUControl::get_buffer() { return buf; }
+
+void HostGPUControl::set_stat_value(unsigned val) { stat_value = val; }
+unsigned HostGPUControl::get_stat_value() { return stat_value; }

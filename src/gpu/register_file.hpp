@@ -11,8 +11,8 @@ public:
     // A mapping from warp id to thread to CSR
     std::map<uint64_t, std::vector<std::map<uint64_t, int>>> warp_id_to_csr;
     RegisterFile(size_t register_count, size_t thread_count);
-    virtual int get_register(uint64_t warp_id, int thread, int reg);
-    virtual void set_register(uint64_t warp_id, int thread, int reg, int value);
+    virtual int get_register(uint64_t warp_id, int thread, int reg, bool is_cpu = false);
+    virtual void set_register(uint64_t warp_id, int thread, int reg, int value, bool is_cpu = false);
     virtual std::optional<int> get_csr(uint64_t warp_id, int thread, int csr);
     virtual void set_csr(uint64_t warp_id, int thread, int csr, int value);
     virtual void pretty_print(uint64_t warp_id);

@@ -23,6 +23,10 @@ public:
   void buffer_data(char val);
   std::string get_buffer();
 
+  // Statistics
+  void set_stat_value(unsigned val);
+  unsigned get_stat_value();
+
 private:
   std::shared_ptr<WarpScheduler> scheduler;
   Pipeline *pipeline = nullptr;
@@ -32,4 +36,5 @@ private:
   bool gpu_active;
 
   std::string buf;
+  unsigned stat_value = 0;  // Value for SIMTGet CSR (0x825)
 };

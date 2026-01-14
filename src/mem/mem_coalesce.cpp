@@ -1,5 +1,6 @@
 #include "mem_coalesce.hpp"
 #include "config.hpp"
+#include "gen/llvm_riscv_registers.h"
 #include <algorithm>
 #include <iostream>
 #include <set>

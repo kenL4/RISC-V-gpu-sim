@@ -19,12 +19,22 @@ void RegisterFile::ensure_warp_initialized(uint64_t warp_id) {
     }
 }
 
-int RegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
+int RegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cpu) {
+    // CPU should never use GPU RegisterFile directly - it should use HostRegisterFile
+    // If CPU tries to access, return 0 (shouldn't happen, but handle gracefully)
+    if (is_cpu) {
+        return 0;
+    }
     ensure_warp_initialized(warp_id);
     return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }
 
-void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value) {
+void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value, bool is_cpu) {
+    // CPU should never use GPU RegisterFile directly - it should use HostRegisterFile
+    // If CPU tries to access, ignore it (shouldn't happen, but handle gracefully)
+    if (is_cpu) {
+        return;
+    }
     ensure_warp_initialized(warp_id);
 
     // Don't write to X0 (zero register) - it's always 0

@@ -219,10 +219,11 @@ bool ExecutionUnit::add(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 + rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+      int result = rs1 + rs2;
+      rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -234,9 +235,10 @@ bool ExecutionUnit::addi(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, rs1 + imm);
+    int result = rs1 + imm;
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -248,10 +250,11 @@ bool ExecutionUnit::sub(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 - rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+      int result = rs1 - rs2;
+      rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -269,8 +272,8 @@ bool ExecutionUnit::mul(Warp *warp, std::vector<size_t> active_threads,
   // Collect register values for all active threads
   std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
   }
   
   // Issue to multiplier unit (will suspend warp)
@@ -292,10 +295,10 @@ bool ExecutionUnit::and_(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 & rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    rf->set_register(warp->warp_id, thread, rd, rs1 & rs2, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -307,9 +310,9 @@ bool ExecutionUnit::andi(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, rs1 & imm);
+    rf->set_register(warp->warp_id, thread, rd, rs1 & imm, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -321,10 +324,10 @@ bool ExecutionUnit::or_(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 | rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    rf->set_register(warp->warp_id, thread, rd, rs1 | rs2, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -336,9 +339,9 @@ bool ExecutionUnit::ori(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, rs1 | imm);
+    rf->set_register(warp->warp_id, thread, rd, rs1 | imm, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -350,10 +353,10 @@ bool ExecutionUnit::xor_(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 ^ rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    rf->set_register(warp->warp_id, thread, rd, rs1 ^ rs2, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -365,9 +368,9 @@ bool ExecutionUnit::xori(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, rs1 ^ imm);
+    rf->set_register(warp->warp_id, thread, rd, rs1 ^ imm, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -379,11 +382,11 @@ bool ExecutionUnit::sll(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     rf->set_register(warp->warp_id, thread, rd,
-                     static_cast<uint64_t>(rs1) << rs2);
+                     static_cast<uint64_t>(rs1) << rs2, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -395,10 +398,10 @@ bool ExecutionUnit::slli(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd,
-                     static_cast<uint64_t>(rs1) << imm);
+    uint64_t result = static_cast<uint64_t>(rs1) << imm;
+    rf->set_register(warp->warp_id, thread, rd, static_cast<int>(result), warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -410,9 +413,9 @@ bool ExecutionUnit::srl(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     rf->set_register(warp->warp_id, thread, rd,
                      static_cast<uint64_t>(rs1) >> rs2);
 
@@ -426,10 +429,13 @@ bool ExecutionUnit::srli(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd,
-                     static_cast<uint64_t>(rs1) >> imm);
+    // SRLI is a logical right shift - treat rs1 as unsigned 32-bit value
+    // Mask to 32 bits first to avoid sign extension when casting negative values
+    uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
+    uint64_t result = static_cast<uint64_t>(rs1_unsigned) >> imm;
+    rf->set_register(warp->warp_id, thread, rd, static_cast<int>(result), warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -441,10 +447,10 @@ bool ExecutionUnit::sra(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, rs1 >> rs2);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    rf->set_register(warp->warp_id, thread, rd, rs1 >> rs2, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -456,9 +462,9 @@ bool ExecutionUnit::srai(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, rs1 >> imm);
+    rf->set_register(warp->warp_id, thread, rd, rs1 >> imm, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -507,7 +513,7 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
 
   for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     valid_threads.push_back(thread);
   }
@@ -540,7 +546,7 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
 
   for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     valid_threads.push_back(thread);
   }
@@ -573,7 +579,7 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
 
   for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     valid_threads.push_back(thread);
   }
@@ -606,7 +612,7 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
 
   for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     valid_threads.push_back(thread);
   }
@@ -639,7 +645,7 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
 
   for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     valid_threads.push_back(thread);
   }
@@ -673,8 +679,8 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   unsigned int rs2_reg = in->getOperand(0).getReg();
 
   for (auto thread : active_threads) {
-    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     values.push_back(rs2);
     valid_threads.push_back(thread);
@@ -706,8 +712,8 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
   unsigned int rs2_reg = in->getOperand(0).getReg();
 
   for (auto thread : active_threads) {
-    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     values.push_back(rs2);
     valid_threads.push_back(thread);
@@ -739,8 +745,8 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
   unsigned int rs2_reg = in->getOperand(0).getReg();
 
   for (auto thread : active_threads) {
-    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
-    int rs1 = rf->get_register(warp->warp_id, thread, base);
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
     addresses.push_back(rs1 + disp);
     values.push_back(rs2);
     valid_threads.push_back(thread);
@@ -779,8 +785,8 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
   }
 
   for (auto thread : active_threads) {
-    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg);
-    int rs1 = rf->get_register(warp->warp_id, thread, rs1_reg);
+    int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
+    int rs1 = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
     addresses.push_back(rs1 + offset);
     add_values.push_back(rs2);
     valid_threads.push_back(thread);
@@ -805,7 +811,7 @@ bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads,
     int rd = in->getOperand(0).getReg();
     int64_t imm = in->getOperand(1).getImm();
 
-    rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4);
+    rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4, warp->is_cpu);
     warp->pc[thread] += imm;
   }
   return active_threads.size() > 0;
@@ -817,10 +823,10 @@ bool ExecutionUnit::jalr(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
-    rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4);
+    rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4, warp->is_cpu);
     uint64_t target = rs1 + imm;
     if (target == 0) {
       warp->finished[thread] = true;
@@ -836,9 +842,9 @@ bool ExecutionUnit::beq(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (rs1 == rs2) {
@@ -855,9 +861,9 @@ bool ExecutionUnit::bne(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (rs1 != rs2) {
@@ -874,9 +880,9 @@ bool ExecutionUnit::blt(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (rs1 < rs2) {
@@ -893,9 +899,9 @@ bool ExecutionUnit::bltu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (uint64_t(rs1) < uint64_t(rs2)) {
@@ -912,9 +918,9 @@ bool ExecutionUnit::bge(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (rs1 >= rs2) {
@@ -931,9 +937,9 @@ bool ExecutionUnit::bgeu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(0).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
 
     if (uint64_t(rs1) >= uint64_t(rs2)) {
@@ -950,9 +956,9 @@ bool ExecutionUnit::slti(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    rf->set_register(warp->warp_id, thread, rd, (rs1 < imm) ? 1 : 0);
+    rf->set_register(warp->warp_id, thread, rd, (rs1 < imm) ? 1 : 0, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -965,10 +971,10 @@ bool ExecutionUnit::slt(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
-    rf->set_register(warp->warp_id, thread, rd, (rs1 < rs2) ? 1 : 0);
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    rf->set_register(warp->warp_id, thread, rd, (rs1 < rs2) ? 1 : 0, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -981,11 +987,11 @@ bool ExecutionUnit::sltiu(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
     rf->set_register(
         warp->warp_id, thread, rd,
-        (static_cast<uint32_t>(rs1) < static_cast<uint32_t>(imm)) ? 1 : 0);
+        (static_cast<uint32_t>(rs1) < static_cast<uint32_t>(imm)) ? 1 : 0, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -998,12 +1004,12 @@ bool ExecutionUnit::sltu(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     rf->set_register(
         warp->warp_id, thread, rd,
-        (static_cast<uint32_t>(rs1) < static_cast<uint32_t>(rs2)) ? 1 : 0);
+        (static_cast<uint32_t>(rs1) < static_cast<uint32_t>(rs2)) ? 1 : 0, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -1021,8 +1027,8 @@ bool ExecutionUnit::remu(Warp *warp, std::vector<size_t> active_threads,
   // Collect register values for all active threads
   std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
   }
   
   // Issue to divider unit (unsigned remainder)
@@ -1049,8 +1055,8 @@ bool ExecutionUnit::divu(Warp *warp, std::vector<size_t> active_threads,
   // Collect register values for all active threads
   std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
   }
   
   // Issue to divider unit (unsigned division)
@@ -1077,8 +1083,8 @@ bool ExecutionUnit::div_(Warp *warp, std::vector<size_t> active_threads,
   // Collect register values for all active threads
   std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
   }
   
   // Issue to divider unit (signed division)
@@ -1105,8 +1111,8 @@ bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
   // Collect register values for all active threads
   std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg);
+    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
+    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
   }
   
   // Issue to divider unit (signed remainder)
@@ -1183,8 +1189,8 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int csr = in->getOperand(1).getImm();
     int rd_reg = in->getOperand(0).getReg();
-    int rs1_val =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg());
+    int rs1_reg = in->getOperand(2).getReg();
+    int rs1_val = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
 
     bool handled = true;
     switch (csr) {
@@ -1195,7 +1201,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         std::cout << "[SimEmit] 0x" << std::hex << rs1_val << std::dec << std::endl;
       }
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x801: {
       // SimFinish: Write-only CSR, terminates simulator
@@ -1205,21 +1211,26 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         std::cout << "[SimFinish] Terminating simulator" << std::endl;
       }
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x802:
-      rf->set_register(warp->warp_id, thread, rd_reg, 1);
+      rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
-    case 0x803:
-      gpu_controller->buffer_data(static_cast<char>(rs1_val));
-      break;
+    case 0x803: {
+      // UART Put: Write byte to UART
+      // Buffer the output for both CPU and GPU (printed later in main)
+      char byte_val = static_cast<char>(rs1_val);
+      gpu_controller->buffer_data(byte_val);
+      // Write-only CSR, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
+    } break;
     case 0x804:
       // Just treat as always ready
-      rf->set_register(warp->warp_id, thread, rd_reg, 1);
+      rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
     case 0xF14: {
       int mhartid = warp->warp_id * 32 + thread; // Assuming 32 threads per warp
-      rf->set_register(warp->warp_id, thread, rd_reg, mhartid);
+      rf->set_register(warp->warp_id, thread, rd_reg, mhartid, warp->is_cpu);
     } break;
     case 0x805: {
       static std::string input_buffer = "16\n";
@@ -1233,28 +1244,28 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       }
       if (!Config::instance().isStatsOnly())
         std::cout << "[Input] Returning " << input_char << std::endl;
-      rf->set_register(warp->warp_id, thread, rd_reg, input_char);
+      rf->set_register(warp->warp_id, thread, rd_reg, input_char, warp->is_cpu);
     } break;
     case 0x806: {
       // InstrAddr: Write-only CSR, sets instruction mem address (for CPU)
       // In SIMTight: csrWrite = Just \x -> do addrReg <== x
       // This is CPU-only, but we should handle it to avoid errors
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x807: {
       // WriteInstr: Write-only CSR, writes to instruction mem (for CPU)
       // In SIMTight: csrWrite = Just \x -> do writeInstr (addrReg.val) x
       // This is CPU-only, but we should handle it to avoid errors
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x820: {
       // Read-only CSR: returns 1 if can put (queue not full), 0 if can't put
       // In SIMTight: csrRead = Just do return (zeroExtend reqs.notFull)
       bool active = gpu_controller->is_gpu_active();
       int can_put = active ? 0 : 1;  // Can put if GPU is not active
-      rf->set_register(warp->warp_id, thread, rd_reg, can_put);
+      rf->set_register(warp->warp_id, thread, rd_reg, can_put, warp->is_cpu);
       // Writes to CSR 0x820 are ignored (read-only)
     } break;
     case 0x821: {
@@ -1262,14 +1273,14 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       // In SIMTight: csrWrite = Just \x -> do addrReg <== x
       // This is CPU-only (used to write instructions to SIMT instruction memory)
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x822: {
       // SIMTWriteInstr: Write-only CSR, writes to instruction mem (for SIMT)
       // In SIMTight: csrWrite = Just \x -> do enq reqs (simtCmd_WriteInstr, addrReg.val, x)
       // This is CPU-only (used to write instructions to SIMT instruction memory)
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x823: {
       // Write-only CSR: writing PC starts kernel (if rs1_val != 0)
@@ -1279,16 +1290,28 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         gpu_controller->launch_kernel();
       }
       // CSR 0x823 is write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x824: {
       bool active = gpu_controller->is_gpu_active();
       int status = active ? 0 : 1;
-      rf->set_register(warp->warp_id, thread, rd_reg, status);
+      rf->set_register(warp->warp_id, thread, rd_reg, status, warp->is_cpu);
     } break;
-    case 0x825:
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
-      break;
+    case 0x825: {
+      // SIMTGet: Read-only CSR, gets SIMT response (stat value after SIMTAskStats)
+      // In SIMTight: csrRead = Just do return (zeroExtend resp.val)
+      // This is a global CSR read by CPU, stored in HostGPUControl
+      // Return as unsigned to match pebblesSIMTGet() return type
+      // IMPORTANT: CPU has warp_id=0, same as GPU warp 0, but HostRegisterFile
+      // isolates CPU registers from GPU registers, so this should write to CPU's
+      // own register file, not GPU warp 0's register file
+      unsigned val = gpu_controller->get_stat_value();
+      // For CPU (is_cpu=true), HostRegisterFile::set_register() ignores warp_id/thread
+      // and writes to CPU's own registers vector, so this is safe
+      int reg_val = static_cast<int>(val);
+      rf->set_register(warp->warp_id, thread, rd_reg, reg_val, warp->is_cpu);
+      // Writes to CSR 0x825 are ignored (read-only)
+    } break;
     case 0x826:
       gpu_controller->set_arg_ptr(rs1_val);
       break;
@@ -1302,33 +1325,39 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       // (matching the behavior but not the exact mechanism)
       uint64_t val = 0;
       switch (rs1_val) {
-      case 0:
+      case 0:  // STAT_SIMT_CYCLES
         val = GPUStatisticsManager::instance().get_gpu_cycles();
         break;
-      case 1:
+      case 1:  // STAT_SIMT_INSTRS
         val = GPUStatisticsManager::instance().get_gpu_instrs();
         break;
-      case 5:
+      case 5:  // STAT_SIMT_RETRIES
         val = GPUStatisticsManager::instance().get_gpu_retries();
         break;
-      case 9:
+      case 6:  // STAT_SIMT_SUSP_BUBBLES
+        val = GPUStatisticsManager::instance().get_gpu_susps();
+        break;
+      case 9:  // STAT_SIMT_DRAM_ACCESSES
         val = GPUStatisticsManager::instance().get_gpu_dram_accs();
         break;
       default:
         val = 0;
         break;
       }
-      // Store result in CSR 0x825 (SIMTGet will read it)
-      rf->set_csr(warp->warp_id, thread, 0x825, val);
+      // Store result in HostGPUControl (SIMTGet CSR 0x825 will read it)
+      // This is a global CSR, not per-warp
+      // Truncate to 32 bits (matching SIMTight's 32-bit response)
+      unsigned stat_val = static_cast<unsigned>(val & 0xFFFFFFFFU);
+      gpu_controller->set_stat_value(stat_val);
       // Write-only, so reads return undefined (we return 0)
-      rf->set_register(warp->warp_id, thread, rd_reg, 0);
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x830: {
       std::optional<int> val = rf->get_csr(warp->warp_id, thread, 0x830);
       if (val.has_value()) {
-        rf->set_register(warp->warp_id, thread, rd_reg, val.value());
+        rf->set_register(warp->warp_id, thread, rd_reg, val.value(), warp->is_cpu);
       } else {
-        rf->set_register(warp->warp_id, thread, rd_reg, 0);
+        rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
       }
       if (rs1_val != 0 || in->getOperand(0).getReg() == 0) {
         rf->set_csr(warp->warp_id, thread, 0x830, rs1_val);
@@ -1350,19 +1379,19 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x831: {
       uint64_t args = gpu_controller->get_arg_ptr();
-      rf->set_register(warp->warp_id, thread, rd_reg, args);
+      rf->set_register(warp->warp_id, thread, rd_reg, args, warp->is_cpu);
     } break;
     case 0xc00: {
       // Cycle: Read-only CSR, cycle count (lower 32 bits)
       // In SIMTight: csrRead = Just do return (lower count.val)
       uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
-      rf->set_register(warp->warp_id, thread, rd_reg, cycles & 0xFFFFFFFF);
+      rf->set_register(warp->warp_id, thread, rd_reg, cycles & 0xFFFFFFFF, warp->is_cpu);
     } break;
     case 0xc80: {
       // CycleH: Read-only CSR, cycle count (upper 32 bits)
       // In SIMTight: csrRead = Just do return (upper count.val)
       uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
-      rf->set_register(warp->warp_id, thread, rd_reg, (cycles >> 32) & 0xFFFFFFFF);
+      rf->set_register(warp->warp_id, thread, rd_reg, (cycles >> 32) & 0xFFFFFFFF, warp->is_cpu);
     } break;
     default:
       handled = false;
@@ -1383,7 +1412,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
                        " -> trapping (skipping for now)");
       continue;
     }
-    rf->set_register(warp->warp_id, thread, rd_reg, csrr.value());
+    rf->set_register(warp->warp_id, thread, rd_reg, csrr.value(), warp->is_cpu);
     rf->set_csr(warp->warp_id, thread, csr, rs1_val);
 
     warp->pc[thread] += 4;

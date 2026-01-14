@@ -14,6 +14,8 @@ struct parse_output {
   std::vector<uint8_t> code;
   uint64_t base_addr;
   uint64_t max_addr;
+  // Data sections (rodata, data, etc.)
+  std::vector<std::pair<uint64_t, std::vector<uint8_t>>> data_sections;
 };
 
 /*

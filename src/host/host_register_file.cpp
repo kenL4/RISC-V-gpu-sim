@@ -1,4 +1,5 @@
 #include "host_register_file.hpp"
+#include "config.hpp"
 
 HostRegisterFile::HostRegisterFile(RegisterFile *rf, int num_registers)
     : RegisterFile(0, 0), rf(rf), num_registers(num_registers) {
@@ -13,44 +14,48 @@ static int get_register_idx(llvm::MCRegister reg) {
   return reg - llvm::RISCV::X0;
 }
 
-int HostRegisterFile::get_register(uint64_t warp_id, int thread, int reg) {
-
-  if (registers.size() <= 0) {
-    registers.resize(num_registers);
-    // Clear values
-    for (int i = 0; i < num_registers; i++) {
-      registers[i] = 0;
+int HostRegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cpu) {
+    // HostRegisterFile is only used for CPU, so always use its own registers vector
+    // (is_cpu flag is passed for consistency, but we always use CPU registers here)
+    
+    if (registers.size() <= 0) {
+        registers.resize(num_registers);
+        // Clear values
+        for (int i = 0; i < num_registers; i++) {
+            registers[i] = 0;
+        }
     }
-  }
 
-  int idx = get_register_idx(reg);
-  if (idx == 0 && registers[idx] != 0) {
-    std::cerr << "[HostRF] x0 is corrupted! value=" << registers[idx]
-              << std::endl;
-  }
-  return registers[idx];
+    int idx = get_register_idx(reg);
+    if (idx == 0 && registers[idx] != 0) {
+        std::cerr << "[HostRF] x0 is corrupted! value=" << registers[idx]
+                  << std::endl;
+    }
+    return registers[idx];
 }
 
 void HostRegisterFile::set_register(uint64_t warp_id, int thread, int reg,
-                                    int value) {
-
-  if (registers.size() <= 0) {
-    registers.resize(num_registers);
-    // Clear values
-    for (int i = 0; i < num_registers; i++) {
-      registers[i] = 0;
+                                    int value, bool is_cpu) {
+    // HostRegisterFile is only used for CPU, so always use its own registers vector
+    // (is_cpu flag is passed for consistency, but we always use CPU registers here)
+    
+    if (registers.size() <= 0) {
+        registers.resize(num_registers);
+        // Clear values
+        for (int i = 0; i < num_registers; i++) {
+            registers[i] = 0;
+        }
     }
-  }
 
-  if (reg == llvm::RISCV::X0) {
-    return;
-  }
+    if (reg == llvm::RISCV::X0) {
+        return;
+    }
 
-  int idx = get_register_idx(reg);
-  if (idx < 0 || idx >= registers.size()) {
-    return;
-  }
-  registers[idx] = value;
+    int idx = get_register_idx(reg);
+    if (idx < 0 || idx >= registers.size()) {
+        return;
+    }
+    registers[idx] = value;
 }
 
 std::optional<int> HostRegisterFile::get_csr(uint64_t warp_id, int thread,
