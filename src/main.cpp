@@ -84,7 +84,6 @@ int main(int argc, char *argv[]) {
       "c,cpu-debug", "Turn on CPU debugging logs (requires --debug enabled)")(
       "r,regdump", "Dump the register values after each writeback stage")(
       "s,statsonly", "Do not print anything aside from the final stats")(
-      "h,help", "Show help")(
       "framebuffer-addr", "Base address of framebuffer in memory (hex, e.g. 0x80001000)",
                           cxxopts::value<std::string>())(
       "framebuffer-width", "Width of framebuffer in pixels",
@@ -92,7 +91,9 @@ int main(int argc, char *argv[]) {
       "framebuffer-height", "Height of framebuffer in pixels",
                             cxxopts::value<uint64_t>()->default_value("64"))(
       "framebuffer-output", "Output BMP filename for framebuffer",
-                            cxxopts::value<std::string>()->default_value("framebuffer.bmp"));
+                            cxxopts::value<std::string>()->default_value("framebuffer.bmp"))(
+      "q,quick", "Disable buffering for outputting earlier than simulation end")(
+      "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);
@@ -107,7 +108,7 @@ int main(int argc, char *argv[]) {
   config.setCPUDebug(result.count("cpu-debug") > 0);
   config.setRegisterDump(result.count("regdump") > 0);
   config.setStatsOnly(result.count("statsonly") > 0);
-  config.setSimtightFormat(result.count("simtight-format") > 0);
+  config.setQuick(result.count("quick") > 0);
 
   std::string filename = result["filename"].as<std::string>();
 
@@ -197,10 +198,12 @@ int main(int argc, char *argv[]) {
 
   std::string output = gpu_controller.get_buffer();
   bool statsOnly = config.isStatsOnly();
-  if (!statsOnly) {
-    std::cout << "[Output]" << std::endl;
+  if (!config.isQuick()) {
+    if (!statsOnly) {
+      std::cout << "[Output]" << std::endl;
+    }
+    std::cout << output;
   }
-  std::cout << output;
 
   // Render framebuffer if address was specified
   if (result.count("framebuffer-addr")) {

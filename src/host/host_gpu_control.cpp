@@ -34,7 +34,13 @@ bool HostGPUControl::is_gpu_active() {
   return gpu_active && scheduler->is_active();
 }
 
-void HostGPUControl::buffer_data(char val) { buf += val; }
+void HostGPUControl::buffer_data(char val) { 
+  if (Config::instance().isQuick()) {
+    std::cout << val << std::flush;
+  } else {
+    buf += val;
+  }
+}
 std::string HostGPUControl::get_buffer() { return buf; }
 
 void HostGPUControl::set_stat_value(unsigned val) { stat_value = val; }

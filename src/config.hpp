@@ -51,14 +51,14 @@ public:
   void setStatsOnly(bool value) { statsOnly = value; }
   bool isStatsOnly() { return statsOnly; }
 
-  void setSimtightFormat(bool value) { simtightFormat = value; }
-  bool isSimtightFormat() { return simtightFormat; }
+  void setQuick(bool value) {quick = value; }
+  bool isQuick() { return quick; }
 
 private:
   bool debug = false;
   bool regDump = false;
   bool cpuDebug = false;
   bool statsOnly = false;
-  bool simtightFormat = false;
+  bool quick = false;
   Config() = default;
 };
