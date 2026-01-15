@@ -34,7 +34,7 @@ public:
   
   // Queue a store request (returns immediately)
   void store(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
-             const std::vector<int> &vals);
+             const std::vector<int> &vals, const std::vector<size_t> &active_threads);
   
   // Queue an atomic add request (returns immediately, old values stored and written on resume)
   // Performs: old_value = *addr; *addr = old_value + add_value; return old_value

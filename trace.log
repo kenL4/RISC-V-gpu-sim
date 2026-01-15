@@ -1,129 +1,114 @@
-[ 67%] Built target gpu_sim_lib
-[ 75%] Built target RISCVGpuSim
+[ 66%] Built target gpu_sim_lib
+[ 74%] Built target RISCVGpuSim
 [100%] Built target unit_tests
 Running kernel: Samples/VecAdd
-[Statistics]
-GPU Cycles: 4969
-GPU Instrs: 158072
-CPU Instrs: 75577
-IPC: 31.8116
-GPU DRAMAccs: 1686
-CPU DRAMAccs: 15091
-GPU Retries: 0
+Cycles: 00001369
+Instrs: 00026978
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000696
+Self test: PASSED
 Running kernel: Samples/Histogram
-[Statistics]
-GPU Cycles: 5793
-GPU Instrs: 182536
-CPU Instrs: 62488
-IPC: 31.5098
-GPU DRAMAccs: 2948
-CPU DRAMAccs: 15347
-GPU Retries: 0
+Cycles: 00001698
+Instrs: 0002c908
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000b84
+Self test: FAILED
 Running kernel: Samples/Reduce
-[Statistics]
-GPU Cycles: 12182
-GPU Instrs: 380494
-CPU Instrs: 28553
-IPC: 31.2341
-GPU DRAMAccs: 1405
-CPU DRAMAccs: 3087
-GPU Retries: 0
+Cycles: 00002f90
+Instrs: 0005ce4e
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 0000057d
+Self test: PASSED
 Running kernel: Samples/Scan
-[Statistics]
-GPU Cycles: 32393
-GPU Instrs: 1032196
-CPU Instrs: 67017
-IPC: 31.8648
-GPU DRAMAccs: 1984
-CPU DRAMAccs: 10377
-GPU Retries: 0
+Cycles: 00007e79
+Instrs: 000fc004
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 000007c0
+Self test: FAILED
 Running kernel: Samples/Transpose
-[Statistics]
-GPU Cycles: 16751
-GPU Instrs: 528384
-CPU Instrs: 187539
-IPC: 31.5434
-GPU DRAMAccs: 4288
-CPU DRAMAccs: 16481
-GPU Retries: 0
+Cycles: 000040d5
+Instrs: 00081000
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 000010c0
+Self test: FAILED
 Running kernel: Samples/MatVecMul
-[Statistics]
-GPU Cycles: 14812
-GPU Instrs: 427904
-CPU Instrs: 129788
-IPC: 28.889
-GPU DRAMAccs: 3968
-CPU DRAMAccs: 24864
-GPU Retries: 0
+Cycles: 000039e3
+Instrs: 00068780
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000f80
+Self test: PASSED
 Running kernel: Samples/MatMul
-[Statistics]
-GPU Cycles: 73742
-GPU Instrs: 2351104
-CPU Instrs: 1972484
-IPC: 31.8828
-GPU DRAMAccs: 5248
-CPU DRAMAccs: 544866
-GPU Retries: 0
+Cycles: 00011f4d
+Instrs: 0023e000
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00001480
+Self test: FAILED
 Running kernel: Samples/BitonicSortSmall
-[Statistics]
-GPU Cycles: 98296
-GPU Instrs: 2992128
-CPU Instrs: 98620
-IPC: 30.44
-GPU DRAMAccs: 5760
-CPU DRAMAccs: 16465
-GPU Retries: 0
+Cycles: 00017f9b
+Instrs: 002da9a8
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00001680
+Self test: PASSED
 Running kernel: Samples/BitonicSortLarge
-[Statistics]
-GPU Cycles: 339713
-GPU Instrs: 9798629
-CPU Instrs: 187999
-IPC: 28.8438
-GPU DRAMAccs: 14528
-CPU DRAMAccs: 16743
-GPU Retries: 0
+Cycles: 000452af
+Instrs: 007adc28
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 000015c0
+Cycles: 00047df6
+Instrs: 007fb264
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00002480
+Cycles: 00052b9f
+Instrs: 00955e64
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 000038c0
+Self test: FAILED
 Running kernel: Samples/SparseMatVecMul
-[Statistics]
-GPU Cycles: 10771
-GPU Instrs: 154112
-CPU Instrs: 85144
-IPC: 14.308
-GPU DRAMAccs: 3421
-CPU DRAMAccs: 18839
-GPU Retries: 0
+Cycles: 00001179
+Instrs: 00021cc0
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000d5d
+Self test: PASSED
 Running kernel: InHouse/BlockedStencil
-[Statistics]
-GPU Cycles: 14487
-GPU Instrs: 443264
-CPU Instrs: 164961
-IPC: 30.5974
-GPU DRAMAccs: 3584
-CPU DRAMAccs: 40809
-GPU Retries: 0
+Cycles: 00003869
+Instrs: 0006c380
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000e00
+Self test: PASSED
 Running kernel: InHouse/StripedStencil
-[Statistics]
-GPU Cycles: 13732
-GPU Instrs: 431808
-CPU Instrs: 136419
-IPC: 31.4454
-GPU DRAMAccs: 3896
-CPU DRAMAccs: 32624
-GPU Retries: 0
+Cycles: 0000354b
+Instrs: 000696c0
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00000f58
+Detected an error at index: 00000000
+Expected value: 0000e665
+Computed value: 00007910
+Self test: FAILED
 Running kernel: InHouse/VecGCD
-[Statistics]
-GPU Cycles: 8904
-GPU Instrs: 132955
-CPU Instrs: 15095
-IPC: 14.9321
-GPU DRAMAccs: 1236
-CPU DRAMAccs: 591
-GPU Retries: 0
+Cycles: 0000108b
+Instrs: 0001facc
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 000004d4
+Self test: PASSED
 Running kernel: InHouse/MotionEst
-[Statistics]
-GPU Cycles: 32803
-GPU Instrs: 973088
-CPU Instrs: 100661
-IPC: 29.6646
-GPU DRAMAccs: 6504
-CPU DRAMAccs: 11128
-GPU Retries: 6
+Cycles: 00007b05
+Instrs: 000f6420
+Susps: 00000000
+Retries: 00000000
+DRAMAccs: 00001988
+Self test: FAILED

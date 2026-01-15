@@ -1,58 +1,6 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
-def read_my_trace(file):
-    f = open(file, "r")
-    data = {}
-    line = f.readline()
-    while line:
-        parts = line.split(" ")
-
-        if len(parts) == 0 or parts[0] != "Running":
-            line = f.readline()
-            continue
-            
-        kernel = parts[2].strip()
-        data[kernel] = {}
-
-        # Skip the [Statistics] thing
-        f.readline()
-        
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_cycles"] = int(parts[2])
-
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_instrs"] = int(parts[2])
-
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["cpu_instrs"] = int(parts[2])
-
-        line = f.readline()
-        parts = line.split(":")
-        data[kernel]["gpu_ipc"] = float(parts[1])
-
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["gpu_dram_accs"] = int(parts[2])
-
-        line = f.readline()
-        parts = line.split(" ")
-        data[kernel]["cpu_dram_accs"] = int(parts[2])
-
-        # Read retry counter if available (may not exist in old trace files)
-        line = f.readline()
-        if line and "Retries" in line:
-            parts = line.split(" ")
-            data[kernel]["gpu_retries"] = int(parts[2])
-        else:
-            data[kernel]["gpu_retries"] = 0
-
-        data[kernel]["gpu_ipc"] = float(data[kernel]["gpu_instrs"]) / data[kernel]["gpu_cycles"]
-    return data
-
 def read_simtight_trace(file):
     f = open(file, "r")
     data = {}
@@ -272,7 +220,7 @@ def plot_gpu_all(data, simtight):
     plt.show()
 
 if __name__ == "__main__":
-    data = read_my_trace("trace.log")
+    data = read_simtight_trace("trace.log")
     simtight = read_simtight_trace("trace_simtight.log")
 
     # plot_gpu_instrs(data, simtight)

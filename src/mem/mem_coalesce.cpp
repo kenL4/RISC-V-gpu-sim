@@ -2,8 +2,11 @@
 #include "config.hpp"
 #include "gen/llvm_riscv_registers.h"
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 #include <set>
+#include <sstream>
+#include <iomanip>
 
 // Use centralized config values from config.hpp
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)
@@ -355,7 +358,8 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
 }
 
 void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
-                           size_t bytes, const std::vector<int> &vals) {
+                           size_t bytes, const std::vector<int> &vals,
+                           const std::vector<size_t> &active_threads) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
   // Queue the request (matching SIMTight: requests go into queue before processing)
@@ -367,6 +371,7 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   req.is_atomic = false;
   req.is_fence = false;
   req.store_values = vals;
+  req.active_threads = active_threads;  // Store active_threads to track which thread is at each index
   pending_request_queue.push(req);
   
   // Suspend warp immediately (request will be processed in tick())
@@ -511,6 +516,54 @@ Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
 
   for (auto &[key, val] : blocked_warps) {
     if (val == 0 && key->is_cpu == is_cpu_pipeline) {
+      // Check if this is a fence that's trying to complete
+      // If so, verify that all pending operations from this warp have completed
+      bool is_fence_completing = false;
+      
+      // Check if there's a fence request for this warp in the pipeline
+      std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
+      while (!temp_pipeline.empty()) {
+        if (temp_pipeline.front().req.warp == key && temp_pipeline.front().req.is_fence) {
+          is_fence_completing = true;
+          break;
+        }
+        temp_pipeline.pop();
+      }
+      
+      // If this is a fence, check for pending operations from the same warp
+      if (is_fence_completing) {
+        bool has_pending = false;
+        
+        // Check pending queue
+        std::queue<MemRequest> temp_queue = pending_request_queue;
+        while (!temp_queue.empty()) {
+          if (temp_queue.front().warp == key && !temp_queue.front().is_fence) {
+            has_pending = true;
+            break;
+          }
+          temp_queue.pop();
+        }
+        
+        // Check pipeline queue
+        if (!has_pending) {
+          std::queue<PipelineRequest> temp_pipeline2 = pipeline_queue;
+          while (!temp_pipeline2.empty()) {
+            if (temp_pipeline2.front().req.warp == key && 
+                !temp_pipeline2.front().req.is_fence) {
+              has_pending = true;
+              break;
+            }
+            temp_pipeline2.pop();
+          }
+        }
+        
+        // If there are pending operations, don't resume the fence yet
+        if (has_pending) {
+          blocked_warps[key] = 1;  // Add one more cycle of delay
+          continue;
+        }
+      }
+      
       resumable_warp = key;
       break;
     }
@@ -584,11 +637,42 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
   if (req.is_fence) {
     // Process memory fence: ensure all previous memory operations complete
     // Matching SIMTight: memGlobalFenceOp ensures memory ordering
-    // In our simple model, fence just needs to go through pipeline
-    // No actual memory access needed - just ensures ordering
-    // Warp was already added to blocked_warps when request was queued
-    // The latency counter will reach 0 and warp will be resumed via get_resumable_warp()
-    // No additional processing needed - fence is complete when it exits pipeline
+    // The fence must wait for all pending memory operations from the same warp to complete
+    // Check if there are any pending requests from this warp still in the queues
+    bool has_pending_ops = false;
+    
+    // Check pending_request_queue (operations queued after the fence)
+    std::queue<MemRequest> temp_queue = pending_request_queue;
+    while (!temp_queue.empty()) {
+      if (temp_queue.front().warp == req.warp && !temp_queue.front().is_fence) {
+        has_pending_ops = true;
+        break;
+      }
+      temp_queue.pop();
+    }
+    
+    // Check pipeline_queue (operations currently in pipeline)
+    if (!has_pending_ops) {
+      std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
+      while (!temp_pipeline.empty()) {
+        if (temp_pipeline.front().req.warp == req.warp && !temp_pipeline.front().req.is_fence) {
+          has_pending_ops = true;
+          break;
+        }
+        temp_pipeline.pop();
+      }
+    }
+    
+    // If there are pending operations, delay fence completion
+    // The fence should not complete until all previous operations from this warp complete
+    if (has_pending_ops && blocked_warps.find(req.warp) != blocked_warps.end()) {
+      // Extend the latency to wait for pending operations to complete
+      // Use a conservative estimate: max pipeline depth + some buffer
+      blocked_warps[req.warp] = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + 5;
+    }
+    // If no pending operations, fence completes (latency was already set in fence())
+    // Note: The fence latency in fence() is 2 * COALESCING_PIPELINE_DEPTH, which should
+    // be enough if there are no pending operations
   } else if (req.is_atomic) {
     // Process atomic add: read old value, add to it, write back, return old value
     std::map<size_t, int> results;
@@ -612,9 +696,28 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // No need to call suspend_warp again - latency was already set correctly
   } else if (req.is_store) {
     // Process store: write to memory
+    // Note: For stores, addresses and values are indexed by thread order from active_threads
+    // If thread 0 is first in active_threads, then index 0 corresponds to thread 0
+    // CRITICAL: addresses and values must have the same size
+    assert(req.addrs.size() == req.store_values.size() && 
+           "Store request: addresses and values must have same size");
+    
     for (size_t i = 0; i < req.addrs.size(); i++) {
       uint64_t addr = req.addrs[i];
       uint64_t val = static_cast<uint64_t>(req.store_values[i]);
+      
+      // Debug logging for GPU Warp 0 Thread 0 (not CPU)
+      // Check if this index corresponds to thread 0
+      if (req.warp->warp_id == 0 && i < req.active_threads.size() && 
+          req.active_threads[i] == 0 && !req.warp->is_cpu && Config::instance().isDebug()) {
+        std::ostringstream oss;
+        oss << "GPU Warp 0 Thread 0: Processing STORE addr=0x" << std::hex << addr
+            << " value=0x" << static_cast<uint32_t>(val)
+            << " bytes=" << std::dec << req.bytes 
+            << " (index=" << i << ")";
+        log("Coalesce", oss.str());
+      }
+      
       scratchpad_mem->store(addr, req.bytes, val);
     }
     
@@ -626,6 +729,18 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
       int64_t value = scratchpad_mem->load(req.addrs[i], req.bytes);
+      
+      // Debug logging for GPU Warp 0 Thread 0 (not CPU)
+      if (req.warp->warp_id == 0 && i < req.active_threads.size() && 
+          req.active_threads[i] == 0 && !req.warp->is_cpu && Config::instance().isDebug()) {
+        std::ostringstream oss;
+        oss << "GPU Warp 0 Thread 0: Processing LOAD addr=0x" << std::hex << req.addrs[i]
+            << " value=0x" << static_cast<uint32_t>(value)
+            << " bytes=" << std::dec << req.bytes 
+            << " rd=" << (req.rd_reg - llvm::RISCV::X0);
+        log("Coalesce", oss.str());
+      }
+      
       results[req.active_threads[i]] = static_cast<int>(value);
     }
     

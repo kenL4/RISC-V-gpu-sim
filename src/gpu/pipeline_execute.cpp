@@ -2,6 +2,9 @@
 #include "../disassembler/llvm_disasm.hpp"
 #include "../stats/stats.hpp"
 #include "../config.hpp"
+#include <climits>
+#include <sstream>
+#include <iomanip>
 
 // In RISC-V, Word is always 32-bit (4 bytes)
 #define WORD_SIZE 4
@@ -24,15 +27,7 @@ execute_result ExecutionUnit::execute(Warp *warp,
   } else if (mnemonic == "SUB") {
     res.write_required = sub(warp, active_threads, &inst);
   } else if (mnemonic == "MUL") {
-    bool was_suspended_before = warp->suspended;
     res.write_required = mul(warp, active_threads, &inst);
-    // If mul() returns false AND warp is not suspended, unit was busy - need to retry
-    // If mul() returns false AND warp is suspended, operation succeeded (writeback happens later)
-    // Matching SIMTight: retry when unit busy (warp not suspended), suspend when operation accepted
-    if (!res.write_required && !warp->suspended) {
-      res.success = false;
-      res.counted = false;
-    }
   } else if (mnemonic == "AND") {
     // Name followed by an underscore as and is a reserved keyword
     res.write_required = and_(warp, active_threads, &inst);
@@ -144,41 +139,13 @@ execute_result ExecutionUnit::execute(Warp *warp,
   } else if (mnemonic == "SLTU") {
     res.write_required = sltu(warp, active_threads, &inst);
   } else if (mnemonic == "REMU") {
-    bool was_suspended_before = warp->suspended;
     res.write_required = remu(warp, active_threads, &inst);
-    // If remu() returns false AND warp is not suspended, unit was busy - need to retry
-    // If remu() returns false AND warp is suspended, operation succeeded (writeback happens later)
-    if (!res.write_required && !warp->suspended) {
-      res.success = false;
-      res.counted = false;
-    }
   } else if (mnemonic == "DIVU") {
-    bool was_suspended_before = warp->suspended;
     res.write_required = divu(warp, active_threads, &inst);
-    // If divu() returns false AND warp is not suspended, unit was busy - need to retry
-    // If divu() returns false AND warp is suspended, operation succeeded (writeback happens later)
-    if (!res.write_required && !warp->suspended) {
-      res.success = false;
-      res.counted = false;
-    }
   } else if (mnemonic == "DIV") {
-    bool was_suspended_before = warp->suspended;
     res.write_required = div_(warp, active_threads, &inst);
-    // If div_() returns false AND warp is not suspended, unit was busy - need to retry
-    // If div_() returns false AND warp is suspended, operation succeeded (writeback happens later)
-    if (!res.write_required && !warp->suspended) {
-      res.success = false;
-      res.counted = false;
-    }
   } else if (mnemonic == "REM") {
-    bool was_suspended_before = warp->suspended;
     res.write_required = rem_(warp, active_threads, &inst);
-    // If rem_() returns false AND warp is not suspended, unit was busy - need to retry
-    // If rem_() returns false AND warp is suspended, operation succeeded (writeback happens later)
-    if (!res.write_required && !warp->suspended) {
-      res.success = false;
-      res.counted = false;
-    }
   } else if (mnemonic == "FENCE") {
     res.write_required = fence(warp, active_threads, &inst);
     // If memory operation returns false AND warp is not suspended, queue was full - need to retry
@@ -218,10 +185,12 @@ bool ExecutionUnit::add(Warp *warp, std::vector<size_t> active_threads,
   assert(in->getNumOperands() == 3);
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
+    unsigned int rs1_reg = in->getOperand(1).getReg();
+    unsigned int rs2_reg = in->getOperand(2).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+        rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+        rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
       int result = rs1 + rs2;
       rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
 
@@ -249,10 +218,12 @@ bool ExecutionUnit::sub(Warp *warp, std::vector<size_t> active_threads,
   assert(in->getNumOperands() == 3);
   for (auto thread : active_threads) {
     unsigned int rd = in->getOperand(0).getReg();
+    unsigned int rs1_reg = in->getOperand(1).getReg();
+    unsigned int rs2_reg = in->getOperand(2).getReg();
     int rs1 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+        rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
     int rs2 =
-        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+        rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
       int result = rs1 - rs2;
       rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
 
@@ -264,30 +235,18 @@ bool ExecutionUnit::sub(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::mul(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
-  
-  unsigned int rd = in->getOperand(0).getReg();
-  unsigned int rs1_reg = in->getOperand(1).getReg();
-  unsigned int rs2_reg = in->getOperand(2).getReg();
-  
-  // Collect register values for all active threads
-  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
-  }
-  
-  // Issue to multiplier unit (will suspend warp)
-  if (!mul_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd)) {
-    return false;  // Unit is busy, need to retry - PC stays unchanged
-  }
-  
-  // Advance PC only after successful issue (matching SIMTight)
-  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    int result = rs1 * rs2;
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
+
     warp->pc[thread] += 4;
   }
-  
-  // Don't write yet - will write when operation completes
-  return false;  // write_required = false, we'll handle writeback on resume
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::and_(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
@@ -512,10 +471,24 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
   unsigned int base = in->getOperand(1).getReg();
   int64_t disp = in->getOperand(2).getImm();
 
-  for (auto thread : active_threads) {
-    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
-    valid_threads.push_back(thread);
+          for (auto thread : active_threads) {
+            int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
+            // RISC-V 64-bit: addresses are zero-extended from 32-bit register values
+            // rs1 is stored as int (32-bit signed), but addresses are unsigned - zero-extend to 64-bit
+            uint64_t rs1_64 = static_cast<uint32_t>(rs1);  // Zero-extend from 32-bit
+            uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+            addresses.push_back(addr);
+            valid_threads.push_back(thread);
+            
+            // Debug logging for GPU Warp 0 Thread 0 (not CPU)
+            if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
+              std::ostringstream oss;
+              oss << "GPU Warp 0 Thread 0: LW addr=0x" << std::hex << addr 
+                  << " rd=" << std::dec << (rd - llvm::RISCV::X0)
+                  << " (rs1=0x" << std::hex << static_cast<uint32_t>(rs1) 
+                  << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
+              log("Load", oss.str());
+            }
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
@@ -547,7 +520,10 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     valid_threads.push_back(thread);
   }
 
@@ -564,7 +540,7 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
 }
 
 bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
-                        MCInst *in) {
+                       MCInst *in) {
   assert(in->getNumOperands() == 3);
 
   // Matching SIMTight: check canPut before accepting memory request
@@ -580,7 +556,10 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     valid_threads.push_back(thread);
   }
 
@@ -613,7 +592,10 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     valid_threads.push_back(thread);
   }
 
@@ -646,7 +628,10 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     valid_threads.push_back(thread);
   }
 
@@ -681,12 +666,26 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     values.push_back(rs2);
     valid_threads.push_back(thread);
+    
+    // Debug logging for GPU Warp 0 Thread 0 (not CPU)
+    if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
+      std::ostringstream oss;
+      oss << "GPU Warp 0 Thread 0: SW addr=0x" << std::hex << addr 
+          << " value=0x" << static_cast<uint32_t>(rs2)
+          << " (rs1=0x" << static_cast<uint32_t>(rs1) 
+          << " rs2=0x" << static_cast<uint32_t>(rs2)
+          << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
+      log("Store", oss.str());
+    }
   }
 
-  cu->store(warp, addresses, WORD_SIZE, values);
+  cu->store(warp, addresses, WORD_SIZE, values, valid_threads);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -714,12 +713,15 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     values.push_back(rs2);
     valid_threads.push_back(thread);
   }
 
-  cu->store(warp, addresses, WORD_SIZE / 2, values);
+  cu->store(warp, addresses, WORD_SIZE / 2, values, valid_threads);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -747,12 +749,15 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    addresses.push_back(rs1 + disp);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
     values.push_back(rs2);
     valid_threads.push_back(thread);
   }
 
-  cu->store(warp, addresses, 1, values);
+  cu->store(warp, addresses, 1, values, valid_threads);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -787,7 +792,10 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    addresses.push_back(rs1 + offset);
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(offset));
+    addresses.push_back(addr);
     add_values.push_back(rs2);
     valid_threads.push_back(thread);
   }
@@ -827,7 +835,9 @@ bool ExecutionUnit::jalr(Warp *warp, std::vector<size_t> active_threads,
     int64_t imm = in->getOperand(2).getImm();
 
     rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4, warp->is_cpu);
-    uint64_t target = rs1 + imm;
+    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
+    uint64_t target = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(imm));
     if (target == 0) {
       warp->finished[thread] = true;
     } else {
@@ -1019,113 +1029,103 @@ bool ExecutionUnit::sltu(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::remu(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
-  
-  unsigned int rd = in->getOperand(0).getReg();
-  unsigned int rs1_reg = in->getOperand(1).getReg();
-  unsigned int rs2_reg = in->getOperand(2).getReg();
-  
-  // Collect register values for all active threads
-  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
-  }
-  
-  // Issue to divider unit (unsigned remainder)
-  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, true)) {
-    return false;  // Unit is busy, need to retry - PC stays unchanged
-  }
-  
-  // Advance PC only after successful issue
-  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    
+    uint32_t u_rs1 = static_cast<uint32_t>(rs1);
+    uint32_t u_rs2 = static_cast<uint32_t>(rs2);
+    int result;
+    
+    if (u_rs2 == 0) {
+      result = static_cast<int>(u_rs1);  // REMU: remainder is numerator
+    } else {
+      result = static_cast<int>(u_rs1 % u_rs2);
+    }
+    
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  
-  return false;  // write_required = false, we'll handle writeback on resume
+  return active_threads.size() > 0;
 }
 
 bool ExecutionUnit::divu(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
-  
-  unsigned int rd = in->getOperand(0).getReg();
-  unsigned int rs1_reg = in->getOperand(1).getReg();
-  unsigned int rs2_reg = in->getOperand(2).getReg();
-  
-  // Collect register values for all active threads
-  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
-  }
-  
-  // Issue to divider unit (unsigned division)
-  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, false, false)) {
-    return false;  // Unit is busy, need to retry - PC stays unchanged
-  }
-  
-  // Advance PC only after successful issue
-  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    
+    uint32_t u_rs1 = static_cast<uint32_t>(rs1);
+    uint32_t u_rs2 = static_cast<uint32_t>(rs2);
+    int result;
+    
+    if (u_rs2 == 0) {
+      result = 0xFFFFFFFF;  // DIVU: quotient is all ones
+    } else {
+      result = static_cast<int>(u_rs1 / u_rs2);
+    }
+    
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  
-  return false;  // write_required = false, we'll handle writeback on resume
+  return active_threads.size() > 0;
 }
 
 bool ExecutionUnit::div_(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
-  
-  unsigned int rd = in->getOperand(0).getReg();
-  unsigned int rs1_reg = in->getOperand(1).getReg();
-  unsigned int rs2_reg = in->getOperand(2).getReg();
-  
-  // Collect register values for all active threads
-  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
-  }
-  
-  // Issue to divider unit (signed division)
-  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, false)) {
-    return false;  // Unit is busy, need to retry - PC stays unchanged
-  }
-  
-  // Advance PC only after successful issue
-  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    
+    int result;
+    if (rs2 == 0) {
+      result = -1;  // DIV: quotient is all ones
+    } else if (rs1 == INT32_MIN && rs2 == -1) {
+      result = INT32_MIN;  // DIV: result is -2^31 (overflow case)
+    } else {
+      result = rs1 / rs2;
+    }
+    
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  
-  return false;  // write_required = false, we'll handle writeback on resume
+  return active_threads.size() > 0;
 }
 
 bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
-  
-  unsigned int rd = in->getOperand(0).getReg();
-  unsigned int rs1_reg = in->getOperand(1).getReg();
-  unsigned int rs2_reg = in->getOperand(2).getReg();
-  
-  // Collect register values for all active threads
-  std::map<size_t, int> rs1_vals, rs2_vals;
   for (auto thread : active_threads) {
-    rs1_vals[thread] = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    rs2_vals[thread] = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
-  }
-  
-  // Issue to divider unit (signed remainder)
-  if (!div_unit.issue(warp, active_threads, rs1_vals, rs2_vals, rd, true, true)) {
-    return false;  // Unit is busy, need to retry - PC stays unchanged
-  }
-  
-  // Advance PC only after successful issue
-  for (auto thread : active_threads) {
+    unsigned int rd = in->getOperand(0).getReg();
+    int rs1 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
+    int rs2 =
+        rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    
+    int result;
+    if (rs2 == 0) {
+      result = rs1;  // REM: remainder is numerator
+    } else if (rs1 == INT32_MIN && rs2 == -1) {
+      result = 0;  // REM: remainder is 0 (overflow case)
+    } else {
+      result = rs1 % rs2;
+    }
+    
+    rf->set_register(warp->warp_id, thread, rd, result, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  
-  return false;  // write_required = false, we'll handle writeback on resume
+  return active_threads.size() > 0;
 }
 
 bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
@@ -1229,8 +1229,23 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
     case 0xF14: {
-      int mhartid = warp->warp_id * 32 + thread; // Assuming 32 threads per warp
+      // Hardware thread ID (hart ID) matching SIMTight's calculation:
+      // hartId = zeroExtend (warpId # laneId) = (warpId << SIMTLogLanes) | laneId
+      // See SIMTight/src/Core/SIMT.hs line 99: let hartId = zeroExtend (ins.execWarpId # ins.execLaneId)
+      // SIMTLogLanes = 5 (since NUM_LANES = 32 = 2^5)
+      constexpr unsigned SIMTLogLanes = 5;
+      uint32_t mhartid_uint = (static_cast<uint32_t>(warp->warp_id) << SIMTLogLanes) | static_cast<uint32_t>(thread);
+      int mhartid = static_cast<int>(mhartid_uint);
       rf->set_register(warp->warp_id, thread, rd_reg, mhartid, warp->is_cpu);
+      
+      // Debug logging for first few warps/threads to verify mhartid calculation
+      if (warp->warp_id < 4 && thread < 2 && !warp->is_cpu && Config::instance().isDebug()) {
+        std::ostringstream oss;
+        oss << "Warp " << warp->warp_id << " Thread " << thread 
+            << ": mhartid=0x" << std::hex << mhartid_uint 
+            << " (" << std::dec << mhartid << ")";
+        log("CSR", oss.str());
+      }
     } break;
     case 0x805: {
       static std::string input_buffer = "16\n";
@@ -1312,9 +1327,13 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, reg_val, warp->is_cpu);
       // Writes to CSR 0x825 are ignored (read-only)
     } break;
-    case 0x826:
-      gpu_controller->set_arg_ptr(rs1_val);
+    case 0x826: {
+      // RISC-V 64-bit: addresses are 32-bit, zero-extended to 64-bit (not sign-extended)
+      // rs1_val contains a 32-bit address value, we need to zero-extend it
+      uint64_t arg_addr = static_cast<uint32_t>(rs1_val);
+      gpu_controller->set_arg_ptr(arg_addr);
       break;
+    }
     case 0x827:
       gpu_controller->set_dims(rs1_val);
       break;
@@ -1379,7 +1398,12 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x831: {
       uint64_t args = gpu_controller->get_arg_ptr();
-      rf->set_register(warp->warp_id, thread, rd_reg, args, warp->is_cpu);
+      // CSR 0x831 returns 32-bit address (as per SIMTight)
+      // The address is 32-bit, but we need to preserve it correctly when storing in int register
+      // Cast to uint32_t first to get the lower 32 bits, then to int (which will preserve the bit pattern)
+      uint32_t args_u32 = static_cast<uint32_t>(args);
+      int args_32 = static_cast<int>(args_u32);
+      rf->set_register(warp->warp_id, thread, rd_reg, args_32, warp->is_cpu);
     } break;
     case 0xc00: {
       // Cycle: Read-only CSR, cycle count (lower 32 bits)
@@ -1454,10 +1478,6 @@ ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf,
 }
 
 void ExecuteSuspend::execute() {
-  // Tick functional units every cycle
-  eu->get_mul_unit().tick();
-  eu->get_div_unit().tick();
-  
   // Check if we have a warp to process (either new or retrying)
   // Matching SIMTight: warps stay in execute stage when retrying
   if (!PipelineStage::input_latch->updated)

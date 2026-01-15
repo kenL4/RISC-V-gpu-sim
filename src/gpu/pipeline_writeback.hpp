@@ -3,9 +3,6 @@
 #include "register_file.hpp"
 #include "utils.hpp"
 
-// Forward declaration
-class ExecutionUnit;
-
 /*
  * The Writeback/Resume unit writes back the per-lane
  * results to the register file for each active thread.
@@ -18,7 +15,6 @@ public:
   void execute() override;
   bool is_active() override;
   
-  void set_execution_unit(ExecutionUnit *eu);
   std::function<void(Warp *warp)> insert_warp;
 
   ~WritebackResume() {};
@@ -26,6 +22,5 @@ public:
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
-  ExecutionUnit *execution_unit = nullptr;
   bool is_cpu_pipeline;  // True if this is the CPU pipeline, false if GPU
 };

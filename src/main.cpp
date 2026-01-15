@@ -50,8 +50,7 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   };
   execute_stage->insert_warp = insert_warp_callback;
   
-  // Connect WritebackResume to ExecutionUnit and set up warp insertion
-  writeback_stage->set_execution_unit(execute_stage->get_execution_unit());
+  // Set up warp insertion for writeback stage
   writeback_stage->insert_warp = insert_warp_callback;
 
   // Initialize latches (7 stages = 7 latches)
@@ -80,8 +79,8 @@ int main(int argc, char *argv[]) {
 
   options.add_options()("filename", "Input filename",
                         cxxopts::value<std::string>())(
-      "d,debug", "Turn on debugging logs")("c,cpu-debug",
-                                           "Turn on CPU debugging logs")(
+      "d,debug", "Turn on debugging logs")(
+      "c,cpu-debug", "Turn on CPU debugging logs (requires --debug enabled)")(
       "r,regdump", "Dump the register values after each writeback stage")(
       "s,statsonly", "Do not print anything aside from the final stats")(
       "h,help", "Show help");

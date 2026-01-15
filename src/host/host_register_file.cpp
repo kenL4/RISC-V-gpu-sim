@@ -4,7 +4,20 @@
 HostRegisterFile::HostRegisterFile(RegisterFile *rf, int num_registers)
     : RegisterFile(0, 0), rf(rf), num_registers(num_registers) {
     // For simulation purposes, we set SP(x2) to the STACK_BASE - 8
-    rf->set_register(0, 0, llvm::RISCV::X2, SIM_CPU_INITIAL_SP);
+    // Note: SIM_CPU_INITIAL_SP is a 64-bit value, but register file stores int (32-bit)
+    // We need to handle this correctly - store as signed int, but it will be interpreted correctly
+    // when used as an address (RISC-V sign-extends 32-bit values to 64-bit)
+    int sp_value = static_cast<int>(SIM_CPU_INITIAL_SP);
+    rf->set_register(0, 0, llvm::RISCV::X2, sp_value);
+    
+    // Also initialize in our own register file
+    if (registers.size() == 0) {
+        registers.resize(num_registers);
+        for (int i = 0; i < num_registers; i++) {
+            registers[i] = 0;
+        }
+    }
+    registers[2] = sp_value;  // x2 = SP
 }
 
 /*

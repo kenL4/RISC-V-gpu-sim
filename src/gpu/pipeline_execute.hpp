@@ -1,5 +1,4 @@
 #include "disassembler/llvm_disasm.hpp"
-#include "functional_units.hpp"
 #include "host/host_gpu_control.hpp"
 #include "mem/mem_coalesce.hpp"
 #include "pipeline.hpp"
@@ -30,18 +29,12 @@ public:
     if (debug_enabled)
       ::log(name, message);
   }
-  
-  // Access functional units for ticking and resuming
-  MulUnit &get_mul_unit() { return mul_unit; }
-  DivUnit &get_div_unit() { return div_unit; }
 
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
   LLVMDisassembler *disasm;
   HostGPUControl *gpu_controller;
-  MulUnit mul_unit;
-  DivUnit div_unit;
   bool debug_enabled = true;
   bool add(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool addi(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);

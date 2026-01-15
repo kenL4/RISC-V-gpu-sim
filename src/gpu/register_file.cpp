@@ -1,4 +1,5 @@
 #include "register_file.hpp"
+#include "config.hpp"
 
 RegisterFile::RegisterFile(size_t register_count, size_t thread_count): 
     registers_per_warp(register_count), thread_count(thread_count) {
