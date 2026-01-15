@@ -344,8 +344,10 @@ bool ExecutionUnit::sll(Warp *warp, std::vector<size_t> active_threads,
         rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
         rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
+    // RISC-V: shift amount is masked to 5 bits (rs2 & 0x1F)
+    unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
     rf->set_register(warp->warp_id, thread, rd,
-                     static_cast<uint64_t>(rs1) << rs2, warp->is_cpu);
+                     static_cast<uint64_t>(rs1) << shamt, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -375,8 +377,12 @@ bool ExecutionUnit::srl(Warp *warp, std::vector<size_t> active_threads,
         rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
         rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
-    rf->set_register(warp->warp_id, thread, rd,
-                     static_cast<uint64_t>(rs1) >> rs2);
+    // RISC-V: shift amount is masked to 5 bits (rs2 & 0x1F)
+    // SRL is logical right shift - treat rs1 as unsigned 32-bit value
+    unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
+    uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
+    uint64_t result = static_cast<uint64_t>(rs1_unsigned) >> shamt;
+    rf->set_register(warp->warp_id, thread, rd, static_cast<int>(result), warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -409,7 +415,10 @@ bool ExecutionUnit::sra(Warp *warp, std::vector<size_t> active_threads,
         rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 =
         rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
-    rf->set_register(warp->warp_id, thread, rd, rs1 >> rs2, warp->is_cpu);
+    // RISC-V: shift amount is masked to 5 bits (rs2 & 0x1F)
+    // SRA is arithmetic right shift - preserve sign
+    unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
+    rf->set_register(warp->warp_id, thread, rd, rs1 >> shamt, warp->is_cpu);
 
     warp->pc[thread] += 4;
   }
@@ -471,28 +480,29 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
   unsigned int base = in->getOperand(1).getReg();
   int64_t disp = in->getOperand(2).getImm();
 
-          for (auto thread : active_threads) {
-            int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-            // RISC-V 64-bit: addresses are zero-extended from 32-bit register values
-            // rs1 is stored as int (32-bit signed), but addresses are unsigned - zero-extend to 64-bit
-            uint64_t rs1_64 = static_cast<uint32_t>(rs1);  // Zero-extend from 32-bit
-            uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
-            addresses.push_back(addr);
-            valid_threads.push_back(thread);
-            
-            // Debug logging for GPU Warp 0 Thread 0 (not CPU)
-            if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
-              std::ostringstream oss;
-              oss << "GPU Warp 0 Thread 0: LW addr=0x" << std::hex << addr 
-                  << " rd=" << std::dec << (rd - llvm::RISCV::X0)
-                  << " (rs1=0x" << std::hex << static_cast<uint32_t>(rs1) 
-                  << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
-              log("Load", oss.str());
-            }
+  for (auto thread : active_threads) {
+    int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
+    // RISC-V 64-bit: addresses are zero-extended from 32-bit register values
+    // rs1 is stored as int (32-bit signed), but addresses are unsigned - zero-extend to 64-bit
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);  // Zero-extend from 32-bit
+    uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    addresses.push_back(addr);
+    valid_threads.push_back(thread);
+    
+    // Debug logging for GPU Warp 0 Thread 0 (not CPU)
+    if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
+      std::ostringstream oss;
+      oss << "GPU Warp 0 Thread 0: LW addr=0x" << std::hex << addr 
+          << " rd=" << std::dec << (rd - llvm::RISCV::X0)
+          << " (rs1=0x" << std::hex << static_cast<uint32_t>(rs1) 
+          << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
+      log("Load", oss.str());
+    }
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
-  cu->load(warp, addresses, WORD_SIZE, rd, valid_threads);
+  // LW is signed, so use sign-extension (default)
+  cu->load(warp, addresses, WORD_SIZE, rd, valid_threads, false);
 
   // Advance PC only after successful memory request (matching SIMTight)
   for (auto thread : valid_threads) {
@@ -528,7 +538,8 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
-  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
+  // LH is signed, so use sign-extension (default)
+  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads, false);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -564,7 +575,8 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
-  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads);
+  // LHU is unsigned, so use zero-extension
+  cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads, true);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -600,7 +612,8 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
-  cu->load(warp, addresses, 1, rd, valid_threads);
+  // LB is signed, so use sign-extension (default)
+  cu->load(warp, addresses, 1, rd, valid_threads, false);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -636,7 +649,8 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
-  cu->load(warp, addresses, 1, rd, valid_threads);
+  // LBU is unsigned, so use zero-extension
+  cu->load(warp, addresses, 1, rd, valid_threads, true);
 
   // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
@@ -836,8 +850,9 @@ bool ExecutionUnit::jalr(Warp *warp, std::vector<size_t> active_threads,
 
     rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4, warp->is_cpu);
     // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    // JALR: target address is (rs1 + imm) with LSB cleared (& ~1)
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
-    uint64_t target = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(imm));
+    uint64_t target = (rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(imm))) & ~1ULL;
     if (target == 0) {
       warp->finished[thread] = true;
     } else {

@@ -14,6 +14,7 @@ struct MemRequest {
   bool is_store;
   bool is_atomic;  // Is this an atomic operation?
   bool is_fence;   // Is this a memory fence operation?
+  bool is_zero_extend;  // For loads: true = zero-extend (lbu, lhu), false = sign-extend (lb, lh, lw)
   std::vector<int> store_values;  // Only used for stores
   std::vector<int> atomic_add_values;  // Only used for atomic add operations
   unsigned int rd_reg;  // Destination register for loads and atomic operations
@@ -29,8 +30,10 @@ public:
   bool can_put();
   
   // Queue a load request (returns immediately, results stored and written on resume)
+  // is_zero_extend: true for unsigned loads (lbu, lhu), false for signed loads (lb, lh, lw)
   void load(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
-            unsigned int rd_reg, const std::vector<size_t> &active_threads);
+            unsigned int rd_reg, const std::vector<size_t> &active_threads,
+            bool is_zero_extend = false);
   
   // Queue a store request (returns immediately)
   void store(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,

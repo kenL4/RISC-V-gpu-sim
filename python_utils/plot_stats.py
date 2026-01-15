@@ -15,45 +15,30 @@ def read_simtight_trace(file):
         kernel = parts[2].strip()
         if kernel not in data:
             data[kernel] = {
-                "gpu_cycles": 0,
-                "gpu_instrs": 0,
-                "gpu_susps": 0,
-                "gpu_retries": 0,
-                "gpu_dram_accs": 0,
+                "Cycles": 0,
+                "Instrs": 0,
+                "Susps": 0,
+                "Retries": 0,
+                "DRAMAccs": 0,
             }
         
         line = f.readline()
-        parts = line.split(" ")
+        parts = line.split(":")
         
-        while parts[0] != "Self":
-            data[kernel]["gpu_cycles"] += int(parts[1], 16)
-
-            line = f.readline()
-            parts = line.split(" ")
-            data[kernel]["gpu_instrs"] += int(parts[1], 16)
-
-            line = f.readline()
-            parts = line.split(" ")
-            data[kernel]["gpu_susps"] += int(parts[1], 16)
-
-            line = f.readline()
-            parts = line.split(" ")
-            data[kernel]["gpu_retries"] += int(parts[1], 16)
-
-            line = f.readline()
-            parts = line.split(" ")
-            data[kernel]["gpu_dram_accs"] += int(parts[1], 16)
+        while parts[0] != "Self test":
+            if parts[0] not in ["Detected an error at index", "Expected value", "Computed value"]:
+                data[kernel][parts[0]] += int(parts[1], 16)
 
             # Move to the next line
             line = f.readline()
-            parts = line.split(" ")
+            parts = line.split(":")
 
-        data[kernel]["gpu_ipc"] = float(data[kernel]["gpu_instrs"]) / data[kernel]["gpu_cycles"]
+        data[kernel]["IPC"] = float(data[kernel]["Instrs"]) / data[kernel]["Cycles"]
     return data
 
 def plot_gpu_instrs(data, simtight):
-    gpu_instrs = [data[name]["gpu_instrs"] for name in data.keys()]
-    simtight_gpu_instrs = [simtight[name]["gpu_instrs"] for name in simtight.keys()]
+    gpu_instrs = [data[name]["Instrs"] for name in data.keys()]
+    simtight_gpu_instrs = [simtight[name]["Instrs"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_instrs))
     bar_width = 0.35
@@ -72,8 +57,8 @@ def plot_gpu_instrs(data, simtight):
     plt.show()
 
 def plot_gpu_cycles(data, simtight):
-    gpu_cycles = [data[name]["gpu_cycles"] for name in data.keys()]
-    simtight_gpu_cycles = [simtight[name]["gpu_cycles"] for name in simtight.keys()]
+    gpu_cycles = [data[name]["Cycles"] for name in data.keys()]
+    simtight_gpu_cycles = [simtight[name]["Cycles"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_cycles))
     bar_width = 0.35
@@ -92,8 +77,8 @@ def plot_gpu_cycles(data, simtight):
     plt.show()
 
 def plot_dram_accs(data, simtight):
-    gpu_dram_accs = [data[name]["gpu_dram_accs"] for name in data.keys()]
-    simtight_gpu_dram_accs = [simtight[name]["gpu_dram_accs"] for name in simtight.keys()]
+    gpu_dram_accs = [data[name]["DRAMAccs"] for name in data.keys()]
+    simtight_gpu_dram_accs = [simtight[name]["DRAMAccs"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_dram_accs))
     bar_width = 0.35
@@ -112,8 +97,8 @@ def plot_dram_accs(data, simtight):
     plt.show()
 
 def plot_ipc(data, simtight):
-    gpu_ipc = [data[name]["gpu_ipc"] for name in data.keys()]
-    simtight_gpu_ipc = [simtight[name]["gpu_ipc"] for name in simtight.keys()]
+    gpu_ipc = [data[name]["IPC"] for name in data.keys()]
+    simtight_gpu_ipc = [simtight[name]["IPC"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_ipc))
     bar_width = 0.35
@@ -132,8 +117,8 @@ def plot_ipc(data, simtight):
     plt.show()
 
 def plot_gpu_retries(data, simtight):
-    gpu_retries = [data[name].get("gpu_retries", 0) for name in data.keys()]
-    simtight_gpu_retries = [simtight[name].get("gpu_retries", 0) for name in simtight.keys()]
+    gpu_retries = [data[name].get("Retries", 0) for name in data.keys()]
+    simtight_gpu_retries = [simtight[name].get("Retries", 0) for name in simtight.keys()]
     
     index = np.arange(len(gpu_retries))
     bar_width = 0.35
@@ -152,8 +137,8 @@ def plot_gpu_retries(data, simtight):
     plt.show()
 
 def plot_gpu_all(data, simtight):
-    gpu_instrs = [data[name]["gpu_instrs"] for name in data.keys()]
-    simtight_gpu_instrs = [simtight[name]["gpu_instrs"] for name in simtight.keys()]
+    gpu_instrs = [data[name]["Instrs"] for name in data.keys()]
+    simtight_gpu_instrs = [simtight[name]["Instrs"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_instrs))
     bar_width = 0.35
@@ -169,8 +154,8 @@ def plot_gpu_all(data, simtight):
     ax[1][0].set_xticklabels(data.keys())
     ax[1][0].legend()
 
-    gpu_cycles = [data[name]["gpu_cycles"] for name in data.keys()]
-    simtight_gpu_cycles = [simtight[name]["gpu_cycles"] for name in simtight.keys()]
+    gpu_cycles = [data[name]["Cycles"] for name in data.keys()]
+    simtight_gpu_cycles = [simtight[name]["Cycles"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_cycles))
     bar_width = 0.35
@@ -185,8 +170,8 @@ def plot_gpu_all(data, simtight):
     ax[0][1].set_xticklabels(data.keys())
     ax[0][1].legend()
 
-    gpu_dram_accs = [data[name]["gpu_dram_accs"] for name in data.keys()]
-    simtight_gpu_dram_accs = [simtight[name]["gpu_dram_accs"] for name in simtight.keys()]
+    gpu_dram_accs = [data[name]["DRAMAccs"] for name in data.keys()]
+    simtight_gpu_dram_accs = [simtight[name]["DRAMAccs"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_dram_accs))
     bar_width = 0.35
@@ -201,8 +186,8 @@ def plot_gpu_all(data, simtight):
     ax[0][0].set_xticklabels(data.keys())
     ax[0][0].legend()
 
-    gpu_ipc = [data[name]["gpu_ipc"] for name in data.keys()]
-    simtight_gpu_ipc = [simtight[name]["gpu_ipc"] for name in simtight.keys()]
+    gpu_ipc = [data[name]["IPC"] for name in data.keys()]
+    simtight_gpu_ipc = [simtight[name]["IPC"] for name in simtight.keys()]
     
     index = np.arange(len(gpu_ipc))
     bar_width = 0.35

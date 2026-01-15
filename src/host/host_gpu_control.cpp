@@ -35,6 +35,7 @@ bool HostGPUControl::is_gpu_active() {
 }
 
 void HostGPUControl::buffer_data(char val) { 
+  if (val == '\0') return;
   if (Config::instance().isQuick()) {
     std::cout << val << std::flush;
   } else {

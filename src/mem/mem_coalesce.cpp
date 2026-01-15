@@ -1,4 +1,5 @@
 #include "mem_coalesce.hpp"
+#include "mem_data.hpp"
 #include "config.hpp"
 #include "gen/llvm_riscv_registers.h"
 #include <algorithm>
@@ -314,7 +315,8 @@ void CoalescingUnit::suspend_warp(Warp *warp,
 
 void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
                           size_t bytes, unsigned int rd_reg,
-                          const std::vector<size_t> &active_threads) {
+                          const std::vector<size_t> &active_threads,
+                          bool is_zero_extend) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
   // Queue the request (matching SIMTight: requests go into queue before processing)
@@ -325,6 +327,7 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.is_store = false;
   req.is_atomic = false;
   req.is_fence = false;
+  req.is_zero_extend = is_zero_extend;
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
@@ -402,9 +405,6 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
 }
 
 void CoalescingUnit::fence(Warp *warp) {
-  // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
-  // Matching SIMTight: FENCE sends memGlobalFenceOp to memory unit and suspends warp
-  
   // Queue the fence request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
   req.warp = warp;
@@ -419,24 +419,14 @@ void CoalescingUnit::fence(Warp *warp) {
   // Suspend warp immediately (fence will be processed in tick(), warp resumes when complete)
   warp->suspended = true;
   
-  // Fence latency: need to account for time request spends in pending queue + pipeline
-  // The latency counter starts decrementing immediately when set, so we need to be conservative
-  // Worst case: request waits in pending queue (could be many cycles if pipeline is full),
-  // then goes through pipeline (COALESCING_PIPELINE_DEPTH cycles)
-  // To be safe, use a latency that accounts for worst-case queue delay
-  // Using MEM_REQ_QUEUE_CAPACITY as worst-case queue wait time seems excessive,
-  // but we need to ensure the warp doesn't resume before the fence actually completes
-  // For now, use 2 * COALESCING_PIPELINE_DEPTH to account for queue delay + pipeline
-  blocked_warps[warp] = 2 * COALESCING_PIPELINE_DEPTH;
+  // A bit of a hack
+  blocked_warps[warp] = MEM_REQ_QUEUE_CAPACITY;
 }
 
 void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
                                  size_t bytes, unsigned int rd_reg,
                                  const std::vector<int> &add_values,
                                  const std::vector<size_t> &active_threads) {
-  // Note: Caller should check can_put() before calling this function
-  // If queue is full, caller should retry (this function should not be called)
-  
   // Queue the atomic add request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
   req.warp = warp;
@@ -728,7 +718,22 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // Process load: read from memory and store results
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
-      int64_t value = scratchpad_mem->load(req.addrs[i], req.bytes);
+      // Read raw bytes from memory
+      uint64_t raw = 0;
+      for (int j = 0; j < req.bytes; j++) {
+        uint64_t addr = req.addrs[i] + j;
+        if (scratchpad_mem->get_raw_memory().find(addr) != scratchpad_mem->get_raw_memory().end()) {
+          raw += (uint64_t)scratchpad_mem->get_raw_memory().at(addr) << (8 * j);
+        }
+      }
+      
+      // Apply sign-extension or zero-extension based on load type
+      int64_t value;
+      if (req.is_zero_extend) {
+        value = zero_extend(raw, req.bytes);
+      } else {
+        value = sign_extend(raw, req.bytes);
+      }
       
       // Debug logging for GPU Warp 0 Thread 0 (not CPU)
       if (req.warp->warp_id == 0 && i < req.active_threads.size() && 
@@ -737,7 +742,8 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
         oss << "GPU Warp 0 Thread 0: Processing LOAD addr=0x" << std::hex << req.addrs[i]
             << " value=0x" << static_cast<uint32_t>(value)
             << " bytes=" << std::dec << req.bytes 
-            << " rd=" << (req.rd_reg - llvm::RISCV::X0);
+            << " rd=" << (req.rd_reg - llvm::RISCV::X0)
+            << " zero_extend=" << (req.is_zero_extend ? "true" : "false");
         log("Coalesce", oss.str());
       }
       

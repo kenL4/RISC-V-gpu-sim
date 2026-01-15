@@ -1,5 +1,6 @@
 #include "mem_data.hpp"
 
+// Helper functions for sign/zero extension (used by both DataMemory and CoalescingUnit)
 int64_t sign_extend(uint64_t val, size_t bytes) {
   switch (bytes) {
   case 1:
@@ -8,6 +9,21 @@ int64_t sign_extend(uint64_t val, size_t bytes) {
     return int64_t(int16_t(val & 0xFFFF));
   case 4:
     return int64_t(int32_t(val & 0xFFFFFFFF));
+  case 8:
+    return int64_t(val); // already 64-bit
+  default:
+    throw std::invalid_argument("Invalid load size");
+  }
+}
+
+int64_t zero_extend(uint64_t val, size_t bytes) {
+  switch (bytes) {
+  case 1:
+    return int64_t(val & 0xFF);  // Zero-extend byte to 64 bits
+  case 2:
+    return int64_t(val & 0xFFFF);  // Zero-extend halfword to 64 bits
+  case 4:
+    return int64_t(val & 0xFFFFFFFF);  // Zero-extend word to 64 bits
   case 8:
     return int64_t(val); // already 64-bit
   default:
