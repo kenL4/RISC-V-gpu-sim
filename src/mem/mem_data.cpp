@@ -34,3 +34,25 @@ void DataMemory::store(uint64_t addr, size_t size, uint64_t val) {
     memory[addr + i] = (val >> (8 * i)) & 0xFF;
   }
 }
+
+std::vector<uint32_t> DataMemory::get_memory_region(uint64_t addr, size_t count) {
+  std::vector<uint32_t> result;
+  result.reserve(count);
+  
+  for (size_t i = 0; i < count; i++) {
+    // Read 4 bytes (32-bit pixel) in little-endian format
+    uint64_t pixel_addr = addr + (i * 4);
+    uint32_t pixel = 0;
+    
+    for (int j = 0; j < 4; j++) {
+      auto it = memory.find(pixel_addr + j);
+      if (it != memory.end()) {
+        pixel |= static_cast<uint32_t>(it->second) << (8 * j);
+      }
+    }
+    
+    result.push_back(pixel);
+  }
+  
+  return result;
+}

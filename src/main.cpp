@@ -12,6 +12,7 @@
 #include "gpu/pipeline_warp_scheduler.hpp"
 #include "gpu/pipeline_writeback.hpp"
 #include "host/host_register_file.hpp"
+#include "images/bmp.hpp"
 #include "mem/mem_coalesce.hpp"
 #include "mem/mem_data.hpp"
 #include "mem/mem_instr.hpp"
@@ -83,7 +84,15 @@ int main(int argc, char *argv[]) {
       "c,cpu-debug", "Turn on CPU debugging logs (requires --debug enabled)")(
       "r,regdump", "Dump the register values after each writeback stage")(
       "s,statsonly", "Do not print anything aside from the final stats")(
-      "h,help", "Show help");
+      "h,help", "Show help")(
+      "framebuffer-addr", "Base address of framebuffer in memory (hex, e.g. 0x80001000)",
+                          cxxopts::value<std::string>())(
+      "framebuffer-width", "Width of framebuffer in pixels",
+                           cxxopts::value<uint64_t>()->default_value("64"))(
+      "framebuffer-height", "Height of framebuffer in pixels",
+                            cxxopts::value<uint64_t>()->default_value("64"))(
+      "framebuffer-output", "Output BMP filename for framebuffer",
+                            cxxopts::value<std::string>()->default_value("framebuffer.bmp"));
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
   auto result = options.parse(argc, argv);
@@ -192,6 +201,28 @@ int main(int argc, char *argv[]) {
     std::cout << "[Output]" << std::endl;
   }
   std::cout << output;
+
+  // Render framebuffer if address was specified
+  if (result.count("framebuffer-addr")) {
+    std::string addr_str = result["framebuffer-addr"].as<std::string>();
+    uint64_t fb_addr = std::stoull(addr_str, nullptr, 0);  // Handles 0x prefix
+    uint64_t fb_width = result["framebuffer-width"].as<uint64_t>();
+    uint64_t fb_height = result["framebuffer-height"].as<uint64_t>();
+    std::string fb_output = result["framebuffer-output"].as<std::string>();
+    
+    if (!statsOnly) {
+      std::cout << "[Framebuffer]" << std::endl;
+      std::cout << "Rendering framebuffer from address 0x" << std::hex << fb_addr << std::dec << std::endl;
+      std::cout << "Dimensions: " << fb_width << "x" << fb_height << std::endl;
+      std::cout << "Output: " << fb_output << std::endl;
+    }
+    
+    render_framebuffer(scratchpad_mem, fb_addr, fb_width, fb_height, fb_output);
+    
+    if (!statsOnly) {
+      std::cout << "Framebuffer rendered successfully!" << std::endl;
+    }
+  }
 
   delete cpu_pipeline;
   delete gpu_pipeline;
