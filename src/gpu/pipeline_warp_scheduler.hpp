@@ -17,6 +17,10 @@ public:
   void set_active(bool a) { active = a; }
   void insert_warp(Warp *warp);
   bool did_issue_warp() const { return warp_issued_this_cycle; }
+  
+  // Set number of warps per block (for barrier synchronization)
+  // A value of 0 indicates all warps form one block
+  void set_warps_per_block(unsigned n);
 
   ~WarpScheduler();
 

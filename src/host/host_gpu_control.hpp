@@ -6,10 +6,11 @@ public:
   HostGPUControl();
   void set_scheduler(std::shared_ptr<WarpScheduler> scheduler);
 
-  // Kerenl config
+  // Kernel config
   void set_pc(uint64_t pc);
   void set_arg_ptr(uint64_t ptr);
-  void set_dims(uint64_t dims);
+  void set_dims(uint64_t dims);  // Deprecated/unused - kept for compatibility
+  void set_warps_per_block(unsigned n);  // Set warps per block for barrier synchronization
 
   // GPU-side accessors
   uint64_t get_arg_ptr();

@@ -1349,9 +1349,17 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       gpu_controller->set_arg_ptr(arg_addr);
       break;
     }
-    case 0x827:
-      gpu_controller->set_dims(rs1_val);
-      break;
+    case 0x827: {
+      // SIMTSetWarpsPerBlock: Write-only CSR, sets number of warps per block
+      // (A block is a group of threads that synchronise on a barrier)
+      // (A value of 0 indicates all warps form one block)
+      // Matching SIMTight: simtCmd_SetWarpsPerBlock command
+      // In SIMTight: warpsPerBlock = n, barrierMask = (n == 0) ? all_ones : (1 << n) - 1
+      unsigned warps_per_block = static_cast<unsigned>(rs1_val);
+      gpu_controller->set_warps_per_block(warps_per_block);
+      // Write-only, so reads return undefined (we return 0)
+      rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
+    } break;
     case 0x828: {
       // SIMTAskStats: Write-only CSR, requests a stat counter
       // In SIMTight: writes request to queue, response comes via SIMTGet (0x825)
@@ -1399,6 +1407,37 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         // Writing non-zero is termination (handled separately if needed)
         if (rs1_val == 0) {
           // Barrier: mark warp as in barrier (matching SIMTight: barrierBits!warpId5 <== true)
+          // SIMTight asserts that warp must be converged before entering barrier:
+          // dynamicAssert (inv excGlobal.val .==>. activeMask5 .==. ones)
+          //   "SIMT pipeline: warp command issued by diverged warp"
+          // This means all threads should be active (converged) before barrier entry.
+          // We check this by verifying all non-finished threads have the same PC and nesting level.
+          bool all_converged = true;
+          uint64_t leader_pc = 0;
+          uint64_t leader_nesting = 0;
+          bool found_leader = false;
+          
+          for (size_t t = 0; t < warp->size; t++) {
+            if (warp->finished[t]) continue;
+            if (!found_leader) {
+              leader_pc = warp->pc[t];
+              leader_nesting = warp->nesting_level[t];
+              found_leader = true;
+            } else {
+              if (warp->pc[t] != leader_pc || warp->nesting_level[t] != leader_nesting) {
+                all_converged = false;
+                break;
+              }
+            }
+          }
+          
+          if (!all_converged && found_leader) {
+            // Log warning: barrier entered by diverged warp (shouldn't happen if noclPop works correctly)
+            std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
+            log("CSRRW", "WARNING: Barrier entered by diverged " + name + 
+                " (PCs/nesting levels differ). This may indicate a convergence issue.");
+          }
+          
           warp->in_barrier = true;
           // Warp is not suspended for barrier - it's just marked as in barrier
           // The scheduler will skip warps in barrier, and barrier release will clear the flag
@@ -1468,9 +1507,22 @@ bool ExecutionUnit::noclpush(Warp *warp, std::vector<size_t> active_threads,
 }
 bool ExecutionUnit::noclpop(Warp *warp, std::vector<size_t> active_threads,
                             MCInst *in) {
-  for (auto thread : active_threads) {
-    warp->nesting_level[thread]--;
-    warp->pc[thread] += 4;
+  // noclPop() semantics: causes threads to converge by waiting for all threads
+  // that were active at the previous noclPush(). To ensure convergence, we need
+  // to update ALL threads in the warp that have nesting_level >= 1, not just
+  // the currently active threads. This ensures that threads that have diverged
+  // will eventually converge.
+  //
+  // Matching SIMTight behavior: noclPop() decrements nesting level for threads
+  // that execute it. However, if only active threads (those with max nesting
+  // level) execute it, threads with lower nesting levels won't advance their PC
+  // and won't converge. By updating all threads with nesting_level >= 1, we
+  // ensure they all advance their PC and will converge in subsequent cycles.
+  for (size_t thread = 0; thread < warp->size; thread++) {
+    if (!warp->finished[thread] && warp->nesting_level[thread] >= 1) {
+      warp->nesting_level[thread]--;
+      warp->pc[thread] += 4;
+    }
   }
   return false;
 }

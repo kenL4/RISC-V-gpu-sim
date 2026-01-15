@@ -23,11 +23,11 @@ Retries: 00000000
 DRAMAccs: 0000057d
 Self test: PASSED
 Running kernel: Samples/Scan
-Cycles: 00007e89
-Instrs: 000fc004
+Cycles: 00007e5e
+Instrs: 000f8f04
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000007c0
+DRAMAccs: 000007bf
 Self test: FAILED
 Running kernel: Samples/Transpose
 Cycles: 00004137
@@ -51,28 +51,28 @@ Retries: 00000000
 DRAMAccs: 00001480
 Self test: FAILED
 Running kernel: Samples/BitonicSortSmall
-Cycles: 00017ee5
-Instrs: 002da9a8
+Cycles: 00017aa1
+Instrs: 0029dd47
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00001680
-Self test: PASSED
+DRAMAccs: 000019d0
+Self test: FAILED
 Running kernel: Samples/BitonicSortLarge
-Cycles: 000451cf
-Instrs: 007adc28
+Cycles: 0003986b
+Instrs: 00097871
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000015c0
-Cycles: 00047df7
-Instrs: 007fb264
+DRAMAccs: 000014c8
+Cycles: 0003c327
+Instrs: 000cbb66
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00002480
-Cycles: 00052a40
-Instrs: 00952b64
+DRAMAccs: 000022ec
+Cycles: 00046888
+Instrs: 00216366
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000038c0
+DRAMAccs: 0000372c
 Self test: FAILED
 Running kernel: Samples/SparseMatVecMul
 Cycles: 00001179
@@ -82,12 +82,15 @@ Retries: 00000000
 DRAMAccs: 00000d5d
 Self test: PASSED
 Running kernel: InHouse/BlockedStencil
-Cycles: 00003815
-Instrs: 0006c380
+Cycles: 000034f7
+Instrs: 0003cdb0
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00000e00
-Self test: PASSED
+DRAMAccs: 00000d80
+Detected an error at index: 00000001
+Expected value: 00010b14
+Computed value: 00000000
+Self test: FAILED
 Running kernel: InHouse/StripedStencil
 Cycles: 0000352f
 Instrs: 000696c0
@@ -100,11 +103,11 @@ Computed value: 00007910
 Self test: FAILED
 Running kernel: InHouse/VecGCD
 Cycles: 0000108b
-Instrs: 0001facc
+Instrs: 0001e3a0
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000004d4
-Self test: PASSED
+Self test: FAILED
 Running kernel: InHouse/MotionEst
 Cycles: 00007953
 Instrs: 000f60a0

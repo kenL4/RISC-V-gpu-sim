@@ -11,6 +11,11 @@ void HostGPUControl::set_scheduler(std::shared_ptr<WarpScheduler> scheduler) {
 void HostGPUControl::set_pc(uint64_t pc) { kernel_pc = pc; }
 void HostGPUControl::set_arg_ptr(uint64_t arg_ptr) { this->arg_ptr = arg_ptr; }
 void HostGPUControl::set_dims(uint64_t dims) { this->dims = dims; }
+void HostGPUControl::set_warps_per_block(unsigned n) {
+  if (scheduler) {
+    scheduler->set_warps_per_block(n);
+  }
+}
 
 uint64_t HostGPUControl::get_arg_ptr() { return arg_ptr; }
 

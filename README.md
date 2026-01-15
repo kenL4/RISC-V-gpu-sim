@@ -51,3 +51,13 @@ To build and run the unit test suite:
 ```bash
 make test
 ```
+
+## Running shader kernels
+This simulator also now supports framebuffer dumping, i.e. rendering of shader kernels.
+If you run the sim with the command-line options: 
+```bash
+--framebuffer-output <file> --framebuffer-width <width> --framebuffer-height <height> --framebuffer-addr <buffer_mem_addr>
+```
+Then, it will dump an output image.
+
+An example kernel I made for that is in `/InHouse/Framebuffer` (poorly named as it should be called Gradient really). It generates a 64x64 image which you can see in output.bmp

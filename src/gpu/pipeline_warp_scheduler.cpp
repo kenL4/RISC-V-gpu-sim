@@ -215,16 +215,36 @@ void WarpScheduler::barrier_release_unit() {
     release_warp_count++;
     
     // Move back to state 1 when finished with block
-    // If warps_per_block == 0, it means all warps (check all 64 warps)
-    unsigned actual_warps_per_block = (warps_per_block == 0) ? 64 : warps_per_block;
-    if (release_warp_count >= actual_warps_per_block || release_warp_id >= 64) {
-      barrier_release_state = 1;
-      // If we've processed all warps, go back to state 0
+    // Matching SIMTight: when (releaseWarpCount.val .==. ins.relWarpsPerBlock) do releaseState <== 1
+    // If warps_per_block == 0, we never match (since we start at 1 and increment), so we process all warps
+    // If warps_per_block > 0, we match when release_warp_count == warps_per_block
+    if (warps_per_block == 0) {
+      // Process all warps (64) before going back to state 1
       if (release_warp_id >= 64) {
-        barrier_release_state = 0;
+        barrier_release_state = 1;
+        // If we've processed all warps, go back to state 0
+        if (barrier_shift_reg == 0) {
+          barrier_release_state = 0;
+        }
+      }
+    } else {
+      // Process warps_per_block warps before going back to state 1
+      if (release_warp_count >= warps_per_block || release_warp_id >= 64) {
+        barrier_release_state = 1;
+        // If we've processed all warps, go back to state 0
+        if (release_warp_id >= 64) {
+          barrier_release_state = 0;
+        }
       }
     }
   }
+}
+
+void WarpScheduler::set_warps_per_block(unsigned n) {
+  // Matching SIMTight: warpsPerBlock = n, barrierMask = (n == 0) ? all_ones : (1 << n) - 1
+  warps_per_block = n;
+  log("Warp Scheduler", "Set warps per block to " + std::to_string(n) + 
+      (n == 0 ? " (all warps)" : ""));
 }
 
 WarpScheduler::~WarpScheduler() {
