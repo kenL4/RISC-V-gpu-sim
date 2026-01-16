@@ -95,6 +95,11 @@ private:
                        bool is_store);
   int calculate_request_count(const std::vector<uint64_t> &addrs, size_t access_size);
   
+  // Translate virtual stack address to physical per-thread stack address
+  // All threads see the same virtual stack addresses, but hardware translates
+  // them to separate physical stacks per thread
+  uint64_t translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id);
+  
   // Process a queued memory request (called from tick())
   void process_mem_request(const MemRequest &req);
 };

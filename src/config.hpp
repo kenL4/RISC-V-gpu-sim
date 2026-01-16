@@ -25,6 +25,12 @@ constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spi
 constexpr size_t SIM_CPU_STACK_BASE = SIM_SHARED_SRAM_BASE - SIM_REG_SPILL_SIZE;
 constexpr size_t SIM_CPU_INITIAL_SP = SIM_CPU_STACK_BASE - 8;
 
+// Stack configuration (matching SIMTight Config.h)
+constexpr size_t SIMT_LOG_BYTES_PER_STACK = 19;  // Each thread stack is 2^19 = 512KB
+constexpr size_t SIMT_BYTES_PER_STACK = 1ULL << SIMT_LOG_BYTES_PER_STACK;  // 512KB per thread
+constexpr size_t SIMT_LOG_LANES = 5;  // NUM_LANES = 32 = 2^5
+constexpr size_t SIMT_LOG_WARPS = 6;  // NUM_WARPS = 64 = 2^6
+
 // GPU pipeline configuration
 constexpr size_t NUM_LANES = 32;
 constexpr size_t NUM_WARPS = 64;

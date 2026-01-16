@@ -8,6 +8,7 @@
 #include <set>
 #include <sstream>
 #include <iomanip>
+#include <cstdint>
 
 // Use centralized config values from config.hpp
 // SIM_DRAM_LATENCY = 30 (matching SIMTight)
@@ -264,6 +265,38 @@ int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
   }
 
   return request_count;
+}
+
+uint64_t CoalescingUnit::translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id) {
+  // Check if address is in the stack region
+  uint64_t addr_32 = virtual_addr & 0xFFFFFFFF;
+  if (addr_32 < SIM_SIMT_STACK_BASE) {
+    // Not a stack address, return as-is
+    return virtual_addr;
+  }
+  
+  // Calculate offset from stack base
+  uint64_t offset = addr_32 - SIM_SIMT_STACK_BASE;
+  
+  if (warp->is_cpu) {
+    // CPU gets its own stack space
+    // Translate to CPU stack region
+    uint64_t cpu_offset = offset;
+    // CPU stack starts at SIM_CPU_STACK_BASE and grows down
+    // For simplicity, we'll map the stack region to CPU stack space
+    // CPU stack size is 1GB, so we can map the entire stack region there
+    return (virtual_addr & 0xFFFFFFFF00000000ULL) | (SIM_CPU_STACK_BASE + cpu_offset);
+  } else {
+    // GPU thread: translate to per-thread physical stack
+    // Physical address = SIM_SIMT_STACK_BASE + (warp_id << (SIMT_LOG_LANES + SIMT_LOG_BYTES_PER_STACK)) 
+    //                    + (thread_id << SIMT_LOG_BYTES_PER_STACK) + offset
+    uint64_t warp_offset = static_cast<uint64_t>(warp->warp_id) << (SIMT_LOG_LANES + SIMT_LOG_BYTES_PER_STACK);
+    uint64_t thread_offset = static_cast<uint64_t>(thread_id) << SIMT_LOG_BYTES_PER_STACK;
+    uint64_t physical_addr = SIM_SIMT_STACK_BASE + warp_offset + thread_offset + offset;
+    
+    // Preserve upper 32 bits if present (for 64-bit addresses)
+    return (virtual_addr & 0xFFFFFFFF00000000ULL) | physical_addr;
+  }
 }
 
 void CoalescingUnit::suspend_warp(Warp *warp,
@@ -667,7 +700,9 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // Process atomic add: read old value, add to it, write back, return old value
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
-      uint64_t addr = req.addrs[i];
+      uint64_t virtual_addr = req.addrs[i];
+      // Translate stack address to physical per-thread address
+      uint64_t addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
       // Read old value
       int64_t old_value = scratchpad_mem->load(addr, req.bytes);
       // Add the increment value
@@ -693,7 +728,9 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
            "Store request: addresses and values must have same size");
     
     for (size_t i = 0; i < req.addrs.size(); i++) {
-      uint64_t addr = req.addrs[i];
+      uint64_t virtual_addr = req.addrs[i];
+      // Translate stack address to physical per-thread address
+      uint64_t addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
       uint64_t val = static_cast<uint64_t>(req.store_values[i]);
       
       scratchpad_mem->store(addr, req.bytes, val);
@@ -706,10 +743,14 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     // Process load: read from memory and store results
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
+      uint64_t virtual_addr = req.addrs[i];
+      // Translate stack address to physical per-thread address
+      uint64_t base_addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
+      
       // Read raw bytes from memory
       uint64_t raw = 0;
       for (int j = 0; j < req.bytes; j++) {
-        uint64_t addr = req.addrs[i] + j;
+        uint64_t addr = base_addr + j;
         if (scratchpad_mem->get_raw_memory().find(addr) != scratchpad_mem->get_raw_memory().end()) {
           raw += (uint64_t)scratchpad_mem->get_raw_memory().at(addr) << (8 * j);
         }
