@@ -26,6 +26,10 @@ int RegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cp
     if (is_cpu) {
         return 0;
     }
+    // RISC-V x0 (zero register) always returns 0, regardless of what's stored
+    if (reg == llvm::RISCV::X0) {
+        return 0;
+    }
     ensure_warp_initialized(warp_id);
     return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }

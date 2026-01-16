@@ -1,6 +1,8 @@
 #include "pipeline_ats.hpp"
+#include "config.hpp"
 #include <string>
 #include <vector>
+#include <sstream>
 
 ActiveThreadSelection::ActiveThreadSelection() {
   log("Active Thread Selection", "Initializing Active Thread Selection Stage");
@@ -72,6 +74,7 @@ void ActiveThreadSelection::execute() {
   // Active threads: those matching leader's state exactly (state2 === s)
   // Matching SIMTight: activeList = [state2 === s | s <- stateMemOuts2]
   std::vector<uint64_t> active_threads;
+  
   for (int i = 0; i < warp->size; i++) {
     if (warp->finished[i])
       continue;
@@ -83,7 +86,7 @@ void ActiveThreadSelection::execute() {
       active_threads.emplace_back(i);
     }
   }
-
+  
   // Store results in buffer for next cycle (2nd substage)
   PipelineStage::input_latch->updated = false;
   stage_buffer.warp = warp;

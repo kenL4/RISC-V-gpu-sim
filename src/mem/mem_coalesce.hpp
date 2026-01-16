@@ -62,6 +62,10 @@ public:
   // Returns pair of (rd_reg, thread_id -> value map), or empty pair if no results
   std::pair<unsigned int, std::map<size_t, int>> get_load_results(Warp *warp);
 
+  // Check if a warp has pending memory operations (for barrier synchronization)
+  // Returns true if the warp has pending stores, loads, or atomics in the queues
+  bool has_pending_memory_ops(Warp *warp);
+
 private:
   std::map<Warp *, size_t> blocked_warps;
   DataMemory *scratchpad_mem;

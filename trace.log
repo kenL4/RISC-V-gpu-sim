@@ -2,97 +2,94 @@
 [ 75%] Built target RISCVGpuSim
 [100%] Built target unit_tests
 Running kernel: Samples/VecAdd
-Cycles: 0000137f
+Cycles: 00001378
 Instrs: 00026978
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 00000696
 Self test: PASSED
 Running kernel: Samples/Histogram
-Cycles: 000016b0
+Cycles: 0000172f
 Instrs: 0002c908
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000005e6
 Self test: PASSED
 Running kernel: Samples/Reduce
-Cycles: 00002f9d
+Cycles: 000031bd
 Instrs: 0005ce4e
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 0000057d
 Self test: PASSED
 Running kernel: Samples/Scan
-Cycles: 00007e5e
-Instrs: 000f8f04
+Cycles: 00008413
+Instrs: 000fc004
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000007bf
-Self test: FAILED
+DRAMAccs: 000007c0
+Self test: PASSED
 Running kernel: Samples/Transpose
-Cycles: 00004137
+Cycles: 00004129
 Instrs: 00081000
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000010c0
 Self test: FAILED
 Running kernel: Samples/MatVecMul
-Cycles: 0000392d
+Cycles: 00003a99
 Instrs: 00068780
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 00000f80
 Self test: PASSED
 Running kernel: Samples/MatMul
-Cycles: 00011f23
+Cycles: 00011da9
 Instrs: 0023e000
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 00001480
 Self test: FAILED
 Running kernel: Samples/BitonicSortSmall
-Cycles: 00017aa1
-Instrs: 0029dd47
+Cycles: 00018479
+Instrs: 002dabc0
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000019d0
-Self test: FAILED
+DRAMAccs: 00001680
+Self test: PASSED
 Running kernel: Samples/BitonicSortLarge
-Cycles: 0003986b
-Instrs: 00097871
+Cycles: 000485d3
+Instrs: 007c2c70
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000014c8
-Cycles: 0003c327
-Instrs: 000cbb66
+DRAMAccs: 000015c0
+Cycles: 0004ae9d
+Instrs: 00810c70
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 000022ec
-Cycles: 00046888
-Instrs: 00216366
+DRAMAccs: 00002480
+Cycles: 000562c3
+Instrs: 00967670
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 0000372c
+DRAMAccs: 000038c0
 Self test: FAILED
 Running kernel: Samples/SparseMatVecMul
 Cycles: 00001179
-Instrs: 00021bc0
+Instrs: 00021ce0
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 00000d5d
 Self test: PASSED
 Running kernel: InHouse/BlockedStencil
-Cycles: 000034f7
-Instrs: 0003cdb0
+Cycles: 00003947
+Instrs: 0006c380
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00000d80
-Detected an error at index: 00000001
-Expected value: 00010b14
-Computed value: 00000000
-Self test: FAILED
+DRAMAccs: 00000e00
+Self test: PASSED
 Running kernel: InHouse/StripedStencil
-Cycles: 0000352f
+Cycles: 000035e5
 Instrs: 000696c0
 Susps: 00000000
 Retries: 00000000
@@ -102,16 +99,16 @@ Expected value: 0000e665
 Computed value: 00007910
 Self test: FAILED
 Running kernel: InHouse/VecGCD
-Cycles: 0000108b
-Instrs: 0001e3a0
+Cycles: 000022f8
+Instrs: 0002075b
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000004d4
-Self test: FAILED
+Self test: PASSED
 Running kernel: InHouse/MotionEst
-Cycles: 00007953
-Instrs: 000f60a0
+Cycles: 00006303
+Instrs: 000bc3c0
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00001988
+DRAMAccs: 00001958
 Self test: FAILED

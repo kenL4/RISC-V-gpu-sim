@@ -7,7 +7,7 @@
 void test_warp_scheduler() {
   std::cout << "Running test_warp_scheduler..." << std::endl;
 
-  WarpScheduler scheduler(32, 4, 0x1000);
+  WarpScheduler scheduler(32, 4, 0x1000, nullptr);
   PipelineLatch input, output;
   output.updated = false;
   scheduler.set_latches(&input, &output);

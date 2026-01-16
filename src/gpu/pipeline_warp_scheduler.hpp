@@ -3,6 +3,9 @@
 #include "pipeline.hpp"
 #include "utils.hpp"
 
+// Forward declaration
+class CoalescingUnit;
+
 /*
  * Represents the warp scheduler unit in the pipeline
  * It will use a barrel scheduler to fairly pick between the warps
@@ -11,7 +14,7 @@
 class WarpScheduler : public PipelineStage {
 public:
   WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
-                bool start_active = true);
+                CoalescingUnit *cu = nullptr, bool start_active = true);
   void execute() override;
   bool is_active() override;
   void set_active(bool a) { active = a; }
@@ -63,6 +66,9 @@ private:
   
   // Map warp_id to Warp* for all warps (needed for barrier release)
   std::map<unsigned, Warp*> all_warps;
+
+  // CoalescingUnit pointer (for checking pending memory operations before barrier release)
+  CoalescingUnit *cu;
 
   // Helper functions for fair scheduling
   static uint64_t firstHot(uint64_t x);

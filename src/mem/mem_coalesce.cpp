@@ -696,18 +696,6 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
       uint64_t addr = req.addrs[i];
       uint64_t val = static_cast<uint64_t>(req.store_values[i]);
       
-      // Debug logging for GPU Warp 0 Thread 0 (not CPU)
-      // Check if this index corresponds to thread 0
-      if (req.warp->warp_id == 0 && i < req.active_threads.size() && 
-          req.active_threads[i] == 0 && !req.warp->is_cpu && Config::instance().isDebug()) {
-        std::ostringstream oss;
-        oss << "GPU Warp 0 Thread 0: Processing STORE addr=0x" << std::hex << addr
-            << " value=0x" << static_cast<uint32_t>(val)
-            << " bytes=" << std::dec << req.bytes 
-            << " (index=" << i << ")";
-        log("Coalesce", oss.str());
-      }
-      
       scratchpad_mem->store(addr, req.bytes, val);
     }
     
@@ -735,18 +723,6 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
         value = sign_extend(raw, req.bytes);
       }
       
-      // Debug logging for GPU Warp 0 Thread 0 (not CPU)
-      if (req.warp->warp_id == 0 && i < req.active_threads.size() && 
-          req.active_threads[i] == 0 && !req.warp->is_cpu && Config::instance().isDebug()) {
-        std::ostringstream oss;
-        oss << "GPU Warp 0 Thread 0: Processing LOAD addr=0x" << std::hex << req.addrs[i]
-            << " value=0x" << static_cast<uint32_t>(value)
-            << " bytes=" << std::dec << req.bytes 
-            << " rd=" << (req.rd_reg - llvm::RISCV::X0)
-            << " zero_extend=" << (req.is_zero_extend ? "true" : "false");
-        log("Coalesce", oss.str());
-      }
-      
       results[req.active_threads[i]] = static_cast<int>(value);
     }
     
@@ -767,4 +743,37 @@ std::pair<unsigned int, std::map<size_t, int>> CoalescingUnit::get_load_results(
     return results;
   }
   return std::make_pair(0, std::map<size_t, int>());  // Empty if no results
+}
+
+bool CoalescingUnit::has_pending_memory_ops(Warp *warp) {
+  // If warp is suspended, it has pending memory operations (can't enter barrier while suspended)
+  if (warp->suspended) {
+    return true;
+  }
+  
+  // Check if warp is blocked with pending memory operations
+  auto blocked_it = blocked_warps.find(warp);
+  if (blocked_it != blocked_warps.end() && blocked_it->second > 0) {
+    return true;  // Warp has pending memory operations with remaining latency
+  }
+  
+  // Check pending_request_queue for this warp
+  std::queue<MemRequest> temp_queue = pending_request_queue;
+  while (!temp_queue.empty()) {
+    if (temp_queue.front().warp == warp) {
+      return true;  // Found pending request for this warp
+    }
+    temp_queue.pop();
+  }
+  
+  // Check pipeline_queue for this warp
+  std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
+  while (!temp_pipeline.empty()) {
+    if (temp_pipeline.front().req.warp == warp) {
+      return true;  // Found request in pipeline for this warp
+    }
+    temp_pipeline.pop();
+  }
+  
+  return false;  // No pending memory operations
 }

@@ -488,16 +488,6 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
     valid_threads.push_back(thread);
-    
-    // Debug logging for GPU Warp 0 Thread 0 (not CPU)
-    if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
-      std::ostringstream oss;
-      oss << "GPU Warp 0 Thread 0: LW addr=0x" << std::hex << addr 
-          << " rd=" << std::dec << (rd - llvm::RISCV::X0)
-          << " (rs1=0x" << std::hex << static_cast<uint32_t>(rs1) 
-          << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
-      log("Load", oss.str());
-    }
   }
 
   // Queue the load request (warp will be suspended, results written on resume)
@@ -677,6 +667,17 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   int64_t disp = in->getOperand(2).getImm();
   unsigned int rs2_reg = in->getOperand(0).getReg();
 
+  // Debug logging for output buffer stores - check if this is a store to the output buffer
+  const uint64_t OUTPUT_BUF_BASE = 0xbff67e80;
+  bool is_output_store = false;
+  if (!warp->is_cpu && !active_threads.empty()) {
+    int test_rs1 = rf->get_register(warp->warp_id, active_threads[0], base, warp->is_cpu);
+    uint64_t test_addr = static_cast<uint32_t>(test_rs1) + static_cast<uint64_t>(static_cast<int64_t>(disp));
+    if (test_addr >= OUTPUT_BUF_BASE && test_addr < OUTPUT_BUF_BASE + 0x10000) {
+      is_output_store = true;
+    }
+  }
+
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
@@ -686,17 +687,6 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
     addresses.push_back(addr);
     values.push_back(rs2);
     valid_threads.push_back(thread);
-    
-    // Debug logging for GPU Warp 0 Thread 0 (not CPU)
-    if (warp->warp_id == 0 && thread == 0 && !warp->is_cpu && Config::instance().isDebug()) {
-      std::ostringstream oss;
-      oss << "GPU Warp 0 Thread 0: SW addr=0x" << std::hex << addr 
-          << " value=0x" << static_cast<uint32_t>(rs2)
-          << " (rs1=0x" << static_cast<uint32_t>(rs1) 
-          << " rs2=0x" << static_cast<uint32_t>(rs2)
-          << " disp=0x" << static_cast<int64_t>(disp) << std::dec << ")";
-      log("Store", oss.str());
-    }
   }
 
   cu->store(warp, addresses, WORD_SIZE, values, valid_threads);
@@ -1253,14 +1243,6 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       int mhartid = static_cast<int>(mhartid_uint);
       rf->set_register(warp->warp_id, thread, rd_reg, mhartid, warp->is_cpu);
       
-      // Debug logging for first few warps/threads to verify mhartid calculation
-      if (warp->warp_id < 4 && thread < 2 && !warp->is_cpu && Config::instance().isDebug()) {
-        std::ostringstream oss;
-        oss << "Warp " << warp->warp_id << " Thread " << thread 
-            << ": mhartid=0x" << std::hex << mhartid_uint 
-            << " (" << std::dec << mhartid << ")";
-        log("CSR", oss.str());
-      }
     } break;
     case 0x805: {
       static std::string input_buffer = "16\n";
@@ -1395,23 +1377,32 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x830: {
-      std::optional<int> val = rf->get_csr(warp->warp_id, thread, 0x830);
-      if (val.has_value()) {
-        rf->set_register(warp->warp_id, thread, rd_reg, val.value(), warp->is_cpu);
-      } else {
-        rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
-      }
-      if (rs1_val != 0 || in->getOperand(0).getReg() == 0) {
+      // CSR 0x830: SIMT barrier/termination command
+      std::optional<int> old_csr_val = rf->get_csr(warp->warp_id, thread, 0x830);
+      int old_val = old_csr_val.has_value() ? old_csr_val.value() : 0;
+      rf->set_register(warp->warp_id, thread, rd_reg, old_val, warp->is_cpu);
+      
+      int rs1_reg = in->getOperand(2).getReg();
+      bool should_write_csr = (rs1_val != 0) || (rd_reg == llvm::RISCV::X0);
+      
+      if (should_write_csr) {
+        // Write rs1_val to CSR 0x830
         rf->set_csr(warp->warp_id, thread, 0x830, rs1_val);
-        // Matching SIMTight: writing 0 to CSR 0x830 is a barrier command
-        // Writing non-zero is termination (handled separately if needed)
+        
+        // Handle barrier command (rs1_val == 0)
         if (rs1_val == 0) {
           // Barrier: mark warp as in barrier (matching SIMTight: barrierBits!warpId5 <== true)
+          // In SIMTight, a suspended warp cannot execute instructions, so it cannot enter a barrier.
+          // We check this by verifying the warp is not suspended.
+          if (warp->suspended) {
+            // Warp is suspended, cannot enter barrier - this should not happen if scheduler works correctly
+            // Don't enter barrier - warp will retry when it resumes
+            return false;
+          }
+          
           // SIMTight asserts that warp must be converged before entering barrier:
           // dynamicAssert (inv excGlobal.val .==>. activeMask5 .==. ones)
           //   "SIMT pipeline: warp command issued by diverged warp"
-          // This means all threads should be active (converged) before barrier entry.
-          // We check this by verifying all non-finished threads have the same PC and nesting level.
           bool all_converged = true;
           uint64_t leader_pc = 0;
           uint64_t leader_nesting = 0;
@@ -1431,15 +1422,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
             }
           }
           
-          if (!all_converged && found_leader) {
-            // Log warning: barrier entered by diverged warp (shouldn't happen if noclPop works correctly)
-            std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
-            log("CSRRW", "WARNING: Barrier entered by diverged " + name + 
-                " (PCs/nesting levels differ). This may indicate a convergence issue.");
-          }
-          
           warp->in_barrier = true;
-          // Warp is not suspended for barrier - it's just marked as in barrier
           // The scheduler will skip warps in barrier, and barrier release will clear the flag
         } else {
           // Termination: mark warp as finished (matching SIMTight: completedWarps <== completedWarps.val + 1)
@@ -1508,22 +1491,12 @@ bool ExecutionUnit::noclpush(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::noclpop(Warp *warp, std::vector<size_t> active_threads,
                             MCInst *in) {
   // noclPop() semantics: causes threads to converge by waiting for all threads
-  // that were active at the previous noclPush(). To ensure convergence, we need
-  // to update ALL threads in the warp that have nesting_level >= 1, not just
-  // the currently active threads. This ensures that threads that have diverged
-  // will eventually converge.
-  //
-  // Matching SIMTight behavior: noclPop() decrements nesting level for threads
-  // that execute it. However, if only active threads (those with max nesting
-  // level) execute it, threads with lower nesting levels won't advance their PC
-  // and won't converge. By updating all threads with nesting_level >= 1, we
-  // ensure they all advance their PC and will converge in subsequent cycles.
-  for (size_t thread = 0; thread < warp->size; thread++) {
-    if (!warp->finished[thread] && warp->nesting_level[thread] >= 1) {
-      warp->nesting_level[thread]--;
-      warp->pc[thread] += 4;
-    }
+  // that were active at the previous noclPush(). 
+  for (auto thread : active_threads) {
+    warp->nesting_level[thread]--;
+    warp->pc[thread] += 4;
   }
+  
   return false;
 }
 bool ExecutionUnit::cache_line_flush(Warp *warp,

@@ -9,9 +9,9 @@ void empty_file(std::string filename) {
 void write_header(std::ofstream &file, uint64_t image_width, uint64_t image_height) {
     // Bitmap Header
     std::string signature = "BM";
-    uint32_t file_size = image_width * image_height + 0x35;
+    uint32_t file_size = image_width * image_height * 3 + 0x35;
     uint32_t reserved = 0;
-    uint32_t data_offset = 0x35;
+    uint32_t data_offset = 0x36;
 
     file.write(signature.c_str(), sizeof(char) * 2); // Type Signature
     file.write((char *) &file_size, sizeof(char) * 4); // File Size
@@ -28,7 +28,7 @@ void write_header(std::ofstream &file, uint64_t image_width, uint64_t image_heig
     uint32_t image_size = 0;
     uint32_t xppm = 0;
     uint32_t yppm = 0;
-    uint32_t colours = 24 * 256;
+    uint32_t colours = 0;
     uint32_t important_colours = 0;
 
     file.write((char *) &size, sizeof(char) * 4); // InfoHeader Size

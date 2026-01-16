@@ -26,9 +26,9 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
 
   // Construct stages (matching SIMTight's 7-stage pipeline)
   if (is_cpu) {
-    p->add_stage<WarpScheduler>(1, 1, im->get_base_addr());  // Stage 0: CPU = 1x1
+    p->add_stage<WarpScheduler>(1, 1, im->get_base_addr(), cu);  // Stage 0: CPU = 1x1
   } else {
-    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), false);  // Stage 0: GPU
+    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), cu, false);  // Stage 0: GPU
   }
   p->add_stage<ActiveThreadSelection>();                     // Stage 1
   p->add_stage<InstructionFetch>(im, disasm);                // Stage 2

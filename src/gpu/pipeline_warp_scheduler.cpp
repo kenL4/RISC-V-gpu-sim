@@ -1,11 +1,12 @@
 #include "pipeline_warp_scheduler.hpp"
 #include "config.hpp"
+#include "mem/mem_coalesce.hpp"
 #include <map>
 #include <climits>
 
 WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
-                             bool start_active)
-    : warp_size(warp_size), warp_count(warp_count), warps_per_block(0),
+                             CoalescingUnit *cu, bool start_active)
+    : warp_size(warp_size), warp_count(warp_count), cu(cu), warps_per_block(0),
       barrier_release_state(0), barrier_shift_reg(0), release_warp_id(0),
       release_warp_count(0), release_success(false), barrier_bits(0) {
   log("Warp Scheduler", "Initializing warp scheduling pipeline stage");
@@ -82,6 +83,7 @@ void WarpScheduler::execute() {
       }
     }
   }
+  
 
   // Barrier release unit (matching SIMTight's makeBarrierReleaseUnit)
   barrier_release_unit();
@@ -171,53 +173,86 @@ void WarpScheduler::insert_warp(Warp *warp) {
 // Barrier release unit (matching SIMTight's makeBarrierReleaseUnit)
 // This logic looks for threads in a block that have all entered a barrier, and then releases them.
 void WarpScheduler::barrier_release_unit() {
-  // Calculate barrier mask (matching SIMTight: barrierMask = warpsPerBlock == 0 ? ones : (1 << warpsPerBlock) - 1)
-  uint64_t barrier_mask = (warps_per_block == 0) ? UINT64_MAX : ((1ULL << warps_per_block) - 1);
+  uint64_t barrier_mask;
+  if (warps_per_block == 0) {
+    barrier_mask = UINT64_MAX;  // All warps
+  } else if (warps_per_block >= 64) {
+    barrier_mask = UINT64_MAX;  // All 64 warps (or more, but we only have 64)
+  } else {
+    barrier_mask = (1ULL << warps_per_block) - 1;
+  }
   
   // Barrier release state machine (matching SIMTight's state machine)
   if (barrier_release_state == 0) {
     // State 0: Load barrier bits into shift register
-    barrier_shift_reg = barrier_bits;
-    release_warp_id = 0;
-    barrier_release_state = 1;
+    if (barrier_bits != 0) {
+      barrier_shift_reg = barrier_bits;
+      release_warp_id = 0;
+      barrier_release_state = 1;
+    }
+    // If barrier_bits == 0, stay in state 0 (no warps in barrier)
   } else if (barrier_release_state == 1) {
-    // State 1: Check if head block has synced
-    // Have all warps in the block entered the barrier?
-    release_success = ((barrier_shift_reg & barrier_mask) == barrier_mask);
+    bool all_in_barrier = ((barrier_shift_reg & barrier_mask) == barrier_mask);
+    release_success = all_in_barrier;
     release_warp_count = 1;
     
     // Move to next state
     if (barrier_shift_reg == 0) {
-      barrier_release_state = 0;  // No warps in barrier, go back to state 0
+      barrier_release_state = 0;  // No warps in barrier, go back to state 0 to reload
     } else {
       barrier_release_state = 2;  // Some warps in barrier, process them
     }
   } else if (barrier_release_state == 2) {
     // State 2: Shift and release
-    // Release warp if all warps in block are ready
-    if (release_success && release_warp_id < 64) {
-      auto it = all_warps.find(release_warp_id);
-      if (it != all_warps.end()) {
-        Warp *w = it->second;
-        if (w->in_barrier && !w->is_cpu) {
-          w->in_barrier = false;  // Clear barrier bit (matching SIMTight: barrierBits!warpId <== false)
-          // Update barrier_bits to reflect the release
-          barrier_bits &= ~(1ULL << release_warp_id);
+    // Matching SIMTight: when (releaseState.val .==. 2 .&&. inv ins.relDisable) do
+    unsigned warps_per_block_check = (warps_per_block == 0) ? 64 : warps_per_block;
+    unsigned block_start_warp = (warps_per_block == 0) ? 0 : ((release_warp_id / warps_per_block_check) * warps_per_block_check);
+    unsigned block_end_warp = block_start_warp + warps_per_block_check - 1;
+    
+    if (release_success) {
+      // Release all warps in the block at once
+      for (unsigned warp_id = block_start_warp; warp_id <= block_end_warp && warp_id < 64; warp_id++) {
+        auto it = all_warps.find(warp_id);
+        if (it != all_warps.end()) {
+          Warp *w = it->second;
+          if (w->in_barrier && !w->is_cpu) {
+            w->in_barrier = false;  // Clear barrier bit
+            // Update barrier_bits to reflect the release
+            barrier_bits &= ~(1ULL << warp_id);
+          }
         }
       }
+      
+      // Shift barrier_shift_reg by warps_per_block to skip all warps in the block
+      // This is equivalent to processing all warps in the block sequentially
+      for (unsigned i = 0; i < warps_per_block_check && release_warp_id < 64; i++) {
+        barrier_shift_reg = barrier_shift_reg >> 1;
+        release_warp_id++;
+        release_warp_count++;
+      }
+    } else {
+      // If release_success is false, process warps one by one (matching SIMTight's behavior)
+      // This handles the case where not all warps are ready yet
+      if (release_warp_id < 64) {
+        auto it = all_warps.find(release_warp_id);
+        if (it != all_warps.end()) {
+          Warp *w = it->second;
+          if (w->in_barrier && !w->is_cpu) {
+            // Don't release - not all warps are ready
+          }
+        }
+      }
+      
+      // Shift barrier shift register right by 1
+      barrier_shift_reg = barrier_shift_reg >> 1;
+      
+      // Move to next warp
+      release_warp_id++;
+      release_warp_count++;
     }
-    
-    // Shift barrier shift register right by 1
-    barrier_shift_reg = barrier_shift_reg >> 1;
-    
-    // Move to next warp
-    release_warp_id++;
-    release_warp_count++;
     
     // Move back to state 1 when finished with block
     // Matching SIMTight: when (releaseWarpCount.val .==. ins.relWarpsPerBlock) do releaseState <== 1
-    // If warps_per_block == 0, we never match (since we start at 1 and increment), so we process all warps
-    // If warps_per_block > 0, we match when release_warp_count == warps_per_block
     if (warps_per_block == 0) {
       // Process all warps (64) before going back to state 1
       if (release_warp_id >= 64) {
@@ -229,7 +264,8 @@ void WarpScheduler::barrier_release_unit() {
       }
     } else {
       // Process warps_per_block warps before going back to state 1
-      if (release_warp_count >= warps_per_block || release_warp_id >= 64) {
+      // Note: release_warp_count starts at 1 in State 1, so we match when release_warp_count == warps_per_block
+      if (release_warp_count > warps_per_block || release_warp_id >= 64) {
         barrier_release_state = 1;
         // If we've processed all warps, go back to state 0
         if (release_warp_id >= 64) {

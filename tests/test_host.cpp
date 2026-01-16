@@ -53,9 +53,8 @@ void test_host_gpu_control() {
   assert(ctrl.get_buffer() == "Hi");
 
   // Test interaction with Scheduler
-  // WarpScheduler(int warp_size, int warp_count, uint64_t start_pc, bool
-  // start_active)
-  auto scheduler = std::make_shared<WarpScheduler>(32, 8, 0x0, false);
+  // WarpScheduler(int warp_size, int warp_count, uint64_t start_pc, CoalescingUnit *cu, bool start_active)
+  auto scheduler = std::make_shared<WarpScheduler>(32, 8, 0x0, nullptr, false);
   ctrl.set_scheduler(scheduler);
 
   // Launch kernel
