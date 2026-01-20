@@ -9,8 +9,6 @@ ActiveThreadSelection::ActiveThreadSelection() {
 }
 
 bool ActiveThreadSelection::is_active() {
-  // Must also check stage_buffer because of 2-cycle latency
-  // If data is buffered, we're still active (will output on next cycle)
   return PipelineStage::input_latch->updated || stage_buffer.valid;
 }
 
@@ -40,14 +38,10 @@ void ActiveThreadSelection::execute() {
 
   Warp *warp = PipelineStage::input_latch->warp;
   
-  // Find leader thread: max of (nesting_level # retry)
-  // Matching SIMTight: maxOf compares (nestLevel # retry) as a combined value
-  // On tie, favors retry (retry=1 is treated as higher)
   int leader_idx = -1;
-  uint64_t leader_value = 0;  // (nesting_level << 1) | retry
+  uint64_t leader_value = 0;
   for (int i = 0; i < warp->size; i++) {
-    if (warp->finished[i])
-      continue;
+    if (warp->finished[i]) continue;
     uint64_t value = (warp->nesting_level[i] << 1) | (warp->retrying[i] ? 1 : 0);
     if (leader_idx == -1 || value > leader_value) {
       leader_idx = i;
@@ -70,15 +64,11 @@ void ActiveThreadSelection::execute() {
   uint64_t leader_pc = warp->pc[leader_idx];
   uint64_t leader_nesting = warp->nesting_level[leader_idx];
   bool leader_retry = warp->retrying[leader_idx];
-  
-  // Active threads: those matching leader's state exactly (state2 === s)
-  // Matching SIMTight: activeList = [state2 === s | s <- stateMemOuts2]
-  std::vector<uint64_t> active_threads;
-  
+
+  std::vector<uint64_t> active_threads;  
   for (int i = 0; i < warp->size; i++) {
     if (warp->finished[i])
       continue;
-    // Compare full state: PC, nesting_level, and retry must all match
     bool state_matches = (warp->pc[i] == leader_pc) &&
                          (warp->nesting_level[i] == leader_nesting) &&
                          (warp->retrying[i] == leader_retry);

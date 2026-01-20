@@ -148,9 +148,6 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = rem_(warp, active_threads, &inst);
   } else if (mnemonic == "FENCE") {
     res.write_required = fence(warp, active_threads, &inst);
-    // If memory operation returns false AND warp is not suspended, queue was full - need to retry
-    // If memory operation returns false AND warp is suspended, operation succeeded (resume happens later)
-    // Matching SIMTight: retry when queue full (warp not suspended), suspend when operation accepted
     if (!res.write_required && !warp->suspended) {
       res.success = false;
       res.counted = false;
@@ -467,11 +464,9 @@ bool ExecutionUnit::auipc(Warp *warp, std::vector<size_t> active_threads,
 bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
-
-  // Matching SIMTight: check canPut before accepting memory request
   // If queue is full, return false to trigger retry (PC should NOT advance)
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -490,16 +485,12 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  // Queue the load request (warp will be suspended, results written on resume)
-  // LW is signed, so use sign-extension (default)
   cu->load(warp, addresses, WORD_SIZE, rd, valid_threads, false);
-
-  // Advance PC only after successful memory request (matching SIMTight)
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - results written on resume)
+  // Results written on resume
   return false;
 }
 
@@ -507,9 +498,8 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -527,16 +517,12 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  // Queue the load request (warp will be suspended, results written on resume)
-  // LH is signed, so use sign-extension (default)
   cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads, false);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - results written on resume)
+  // Results written on resume
   return false;
 }
 
@@ -544,9 +530,8 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -564,16 +549,12 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  // Queue the load request (warp will be suspended, results written on resume)
-  // LHU is unsigned, so use zero-extension
   cu->load(warp, addresses, WORD_SIZE / 2, rd, valid_threads, true);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - results written on resume)
+  // Results written on resume
   return false;
 }
 
@@ -581,9 +562,8 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -600,17 +580,13 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
     addresses.push_back(addr);
     valid_threads.push_back(thread);
   }
-
-  // Queue the load request (warp will be suspended, results written on resume)
-  // LB is signed, so use sign-extension (default)
+  
   cu->load(warp, addresses, 1, rd, valid_threads, false);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - results written on resume)
+  // Results written on resume
   return false;
 }
 
@@ -618,9 +594,8 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -638,16 +613,12 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  // Queue the load request (warp will be suspended, results written on resume)
-  // LBU is unsigned, so use zero-extension
   cu->load(warp, addresses, 1, rd, valid_threads, true);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - results written on resume)
+  // Results written on resume
   return false;
 }
 
@@ -655,9 +626,8 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -666,17 +636,6 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   unsigned int base = in->getOperand(1).getReg();
   int64_t disp = in->getOperand(2).getImm();
   unsigned int rs2_reg = in->getOperand(0).getReg();
-
-  // Debug logging for output buffer stores - check if this is a store to the output buffer
-  const uint64_t OUTPUT_BUF_BASE = 0xbff67e80;
-  bool is_output_store = false;
-  if (!warp->is_cpu && !active_threads.empty()) {
-    int test_rs1 = rf->get_register(warp->warp_id, active_threads[0], base, warp->is_cpu);
-    uint64_t test_addr = static_cast<uint32_t>(test_rs1) + static_cast<uint64_t>(static_cast<int64_t>(disp));
-    if (test_addr >= OUTPUT_BUF_BASE && test_addr < OUTPUT_BUF_BASE + 0x10000) {
-      is_output_store = true;
-    }
-  }
 
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
@@ -690,8 +649,6 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   }
 
   cu->store(warp, addresses, WORD_SIZE, values, valid_threads);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -702,9 +659,8 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -726,8 +682,6 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
   }
 
   cu->store(warp, addresses, WORD_SIZE / 2, values, valid_threads);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -738,9 +692,8 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
                        MCInst *in) {
   assert(in->getNumOperands() == 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -762,8 +715,6 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
   }
 
   cu->store(warp, addresses, 1, values, valid_threads);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
@@ -772,14 +723,11 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
 
 bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
                               MCInst *in) {
-  // AMOADD_W instruction: amoadd.w rd, rs2, (rs1)
-  // Performs: old_value = *rs1; *rs1 = old_value + rs2; rd = old_value
-  // Operands: rd (dest), rs2 (value to add), rs1 (base address), offset (usually 0)
+  // I do AMOADD_W via a memory request for atomicity
   assert(in->getNumOperands() >= 3);
 
-  // Matching SIMTight: check canPut before accepting memory request
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
   std::vector<uint64_t> addresses;
@@ -804,15 +752,12 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
     valid_threads.push_back(thread);
   }
 
-  // Queue the atomic add request (warp will be suspended, old values written on resume)
   cu->atomic_add(warp, addresses, WORD_SIZE, rd, add_values, valid_threads);
-
-  // Advance PC only after successful memory request
   for (auto thread : valid_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - old values written on resume)
+  // Results written on resume
   return false;
 }
 bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads,
@@ -1046,7 +991,7 @@ bool ExecutionUnit::remu(Warp *warp, std::vector<size_t> active_threads,
     int result;
     
     if (u_rs2 == 0) {
-      result = static_cast<int>(u_rs1);  // REMU: remainder is numerator
+      result = static_cast<int>(u_rs1);
     } else {
       result = static_cast<int>(u_rs1 % u_rs2);
     }
@@ -1072,7 +1017,7 @@ bool ExecutionUnit::divu(Warp *warp, std::vector<size_t> active_threads,
     int result;
     
     if (u_rs2 == 0) {
-      result = 0xFFFFFFFF;  // DIVU: quotient is all ones
+      result = 0xFFFFFFFF;
     } else {
       result = static_cast<int>(u_rs1 / u_rs2);
     }
@@ -1095,9 +1040,9 @@ bool ExecutionUnit::div_(Warp *warp, std::vector<size_t> active_threads,
     
     int result;
     if (rs2 == 0) {
-      result = -1;  // DIV: quotient is all ones
+      result = -1;
     } else if (rs1 == INT32_MIN && rs2 == -1) {
-      result = INT32_MIN;  // DIV: result is -2^31 (overflow case)
+      result = INT32_MIN;
     } else {
       result = rs1 / rs2;
     }
@@ -1120,9 +1065,9 @@ bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
     
     int result;
     if (rs2 == 0) {
-      result = rs1;  // REM: remainder is numerator
+      result = rs1;
     } else if (rs1 == INT32_MIN && rs2 == -1) {
-      result = 0;  // REM: remainder is 0 (overflow case)
+      result = 0;
     } else {
       result = rs1 % rs2;
     }
@@ -1138,37 +1083,21 @@ bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
   // Matching SIMTight: check canPut before accepting memory fence request
   // If queue is full, return false to trigger retry (PC should NOT advance)
   if (!cu->can_put()) {
-    return false;  // Memory system busy, need to retry - PC stays unchanged
+    return false;
   }
 
-  // Queue the fence request (warp will be suspended, resumes when fence completes)
   cu->fence(warp);
-
-  // Advance PC only after successful memory fence request (matching SIMTight)
   for (auto thread : active_threads) {
     warp->pc[thread] += 4;
   }
 
-  // Return false (no immediate write required - fence completes on resume)
+  // Fence completes on resume
   return false;
 }
 
 bool ExecutionUnit::ecall(Warp *warp, std::vector<size_t> active_threads,
                           MCInst *in) {
   assert(in->getNumOperands() == 0);
-
-  // This log call is inside ExecutionUnit, which is NOT a PipelineStage.
-  // However, ExecutionUnit is owned by ExecuteSuspend.
-  // We can't easily access ExecuteSuspend's log method.
-  // But wait, ExecutionUnit calls global log.
-  // If we want to mute this, we need to pass debug flag to ExecutionUnit too.
-  // Or just let it log globally? No, user wants to mute CPU logs.
-  // So ExecutionUnit needs to know if it's CPU or GPU.
-  // Let's assume for now we leave it global, or update ExecutionUnit later.
-  // Actually, ExecutionUnit has a lot of logs.
-
-  // Let's stick to PipelineStage subclasses first.
-  // ExecuteSuspend calls log.
 
   log("ExUn - Operating System", "Received an ecall");
   for (auto thread : active_threads) {
@@ -1200,8 +1129,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     bool handled = true;
     switch (csr) {
     case 0x800: {
-      // SimEmit: Write-only CSR, emits word in simulation
-      // In SIMTight: csrWrite = Just \x -> do display "0x" (formatHex 8 x)
+      // I'm not convinced any of the NoCL kernels actually use this
       if (!Config::instance().isStatsOnly()) {
         std::cout << "[SimEmit] 0x" << std::hex << rs1_val << std::dec << std::endl;
       }
@@ -1209,9 +1137,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x801: {
-      // SimFinish: Write-only CSR, terminates simulator
-      // In SIMTight: csrWrite = Just \x -> do finish
-      // For now, we'll just log it (actual termination handled elsewhere)
+      // I'm not convinced any of the NoCL kernels actually use this
       if (!Config::instance().isStatsOnly()) {
         std::cout << "[SimFinish] Terminating simulator" << std::endl;
       }
@@ -1219,24 +1145,24 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x802:
+      // UARTCanPut (my sim can always output so it is okay to just use 1)
       rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
     case 0x803: {
       // UART Put: Write byte to UART
-      // Buffer the output for both CPU and GPU (printed later in main)
+      // Buffer the output for both CPU and GPU
       char byte_val = static_cast<char>(rs1_val);
       gpu_controller->buffer_data(byte_val);
       // Write-only CSR, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x804:
-      // Just treat as always ready
+      // UARTCanGet (like CanPut, my sim can always read stats)
       rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
     case 0xF14: {
-      // Hardware thread ID (hart ID) matching SIMTight's calculation:
+      // mhartId (assigns each thread a unique ID)
       // hartId = zeroExtend (warpId # laneId) = (warpId << SIMTLogLanes) | laneId
-      // See SIMTight/src/Core/SIMT.hs line 99: let hartId = zeroExtend (ins.execWarpId # ins.execLaneId)
       // SIMTLogLanes = 5 (since NUM_LANES = 32 = 2^5)
       constexpr unsigned SIMTLogLanes = 5;
       uint32_t mhartid_uint = (static_cast<uint32_t>(warp->warp_id) << SIMTLogLanes) | static_cast<uint32_t>(thread);
@@ -1260,48 +1186,47 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x806: {
       // InstrAddr: Write-only CSR, sets instruction mem address (for CPU)
-      // In SIMTight: csrWrite = Just \x -> do addrReg <== x
-      // This is CPU-only, but we should handle it to avoid errors
+      // My simulator handles this step at initialisation
+
       // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x807: {
       // WriteInstr: Write-only CSR, writes to instruction mem (for CPU)
-      // In SIMTight: csrWrite = Just \x -> do writeInstr (addrReg.val) x
-      // This is CPU-only, but we should handle it to avoid errors
+      // I don't know when this would ever be necessary
+
       // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x820: {
-      // Read-only CSR: returns 1 if can put (queue not full), 0 if can't put
-      // In SIMTight: csrRead = Just do return (zeroExtend reqs.notFull)
+      // SIMTCanPut: Read-only CSR, returns 1 if can put (queue not full), 0 if can't put
+      // If the GPU is inactive, then the CPU can issue a new SIMT request
       bool active = gpu_controller->is_gpu_active();
       int can_put = active ? 0 : 1;  // Can put if GPU is not active
       rf->set_register(warp->warp_id, thread, rd_reg, can_put, warp->is_cpu);
-      // Writes to CSR 0x820 are ignored (read-only)
     } break;
     case 0x821: {
       // SIMTInstrAddr: Write-only CSR, sets instruction mem address (for SIMT)
-      // In SIMTight: csrWrite = Just \x -> do addrReg <== x
-      // This is CPU-only (used to write instructions to SIMT instruction memory)
+      // My simulator handles this step in the launch_kernel function
+
       // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x822: {
       // SIMTWriteInstr: Write-only CSR, writes to instruction mem (for SIMT)
-      // In SIMTight: csrWrite = Just \x -> do enq reqs (simtCmd_WriteInstr, addrReg.val, x)
-      // This is CPU-only (used to write instructions to SIMT instruction memory)
+      // I don't think this happens in my sim setup
+
       // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x823: {
       // Write-only CSR: writing PC starts kernel (if rs1_val != 0)
-      // In SIMTight: csrWrite = Just \x -> do enq reqs (simtCmd_StartPipeline, x, ...)
       if (rs1_val != 0) {
         gpu_controller->set_pc(rs1_val);
         gpu_controller->launch_kernel();
       }
-      // CSR 0x823 is write-only, so reads return undefined (we return 0)
+
+      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x824: {
@@ -1311,15 +1236,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x825: {
       // SIMTGet: Read-only CSR, gets SIMT response (stat value after SIMTAskStats)
-      // In SIMTight: csrRead = Just do return (zeroExtend resp.val)
-      // This is a global CSR read by CPU, stored in HostGPUControl
-      // Return as unsigned to match pebblesSIMTGet() return type
-      // IMPORTANT: CPU has warp_id=0, same as GPU warp 0, but HostRegisterFile
-      // isolates CPU registers from GPU registers, so this should write to CPU's
-      // own register file, not GPU warp 0's register file
       unsigned val = gpu_controller->get_stat_value();
-      // For CPU (is_cpu=true), HostRegisterFile::set_register() ignores warp_id/thread
-      // and writes to CPU's own registers vector, so this is safe
       int reg_val = static_cast<int>(val);
       rf->set_register(warp->warp_id, thread, rd_reg, reg_val, warp->is_cpu);
       // Writes to CSR 0x825 are ignored (read-only)
@@ -1335,18 +1252,14 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       // SIMTSetWarpsPerBlock: Write-only CSR, sets number of warps per block
       // (A block is a group of threads that synchronise on a barrier)
       // (A value of 0 indicates all warps form one block)
-      // Matching SIMTight: simtCmd_SetWarpsPerBlock command
-      // In SIMTight: warpsPerBlock = n, barrierMask = (n == 0) ? all_ones : (1 << n) - 1
       unsigned warps_per_block = static_cast<unsigned>(rs1_val);
       gpu_controller->set_warps_per_block(warps_per_block);
       // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x828: {
-      // SIMTAskStats: Write-only CSR, requests a stat counter
-      // In SIMTight: writes request to queue, response comes via SIMTGet (0x825)
-      // For simplicity, we directly compute and store the stat value in CSR 0x825
-      // (matching the behavior but not the exact mechanism)
+      // SIMTAskStats: Write-only CSR, requests a stat counter and saves
+      // for future read
       uint64_t val = 0;
       switch (rs1_val) {
       case 0:  // STAT_SIMT_CYCLES
@@ -1368,9 +1281,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         val = 0;
         break;
       }
-      // Store result in HostGPUControl (SIMTGet CSR 0x825 will read it)
-      // This is a global CSR, not per-warp
-      // Truncate to 32 bits (matching SIMTight's 32-bit response)
+      
       unsigned stat_val = static_cast<unsigned>(val & 0xFFFFFFFFU);
       gpu_controller->set_stat_value(stat_val);
       // Write-only, so reads return undefined (we return 0)
@@ -1386,17 +1297,13 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       bool should_write_csr = (rs1_val != 0) || (rd_reg == llvm::RISCV::X0);
       
       if (should_write_csr) {
-        // Write rs1_val to CSR 0x830
         rf->set_csr(warp->warp_id, thread, 0x830, rs1_val);
         
         // Handle barrier command (rs1_val == 0)
         if (rs1_val == 0) {
           // Barrier: mark warp as in barrier (matching SIMTight: barrierBits!warpId5 <== true)
-          // In SIMTight, a suspended warp cannot execute instructions, so it cannot enter a barrier.
-          // We check this by verifying the warp is not suspended.
           if (warp->suspended) {
             // Warp is suspended, cannot enter barrier - this should not happen if scheduler works correctly
-            // Don't enter barrier - warp will retry when it resumes
             return false;
           }
           
@@ -1410,6 +1317,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
           
           for (size_t t = 0; t < warp->size; t++) {
             if (warp->finished[t]) continue;
+
             if (!found_leader) {
               leader_pc = warp->pc[t];
               leader_nesting = warp->nesting_level[t];
@@ -1425,8 +1333,7 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
           warp->in_barrier = true;
           // The scheduler will skip warps in barrier, and barrier release will clear the flag
         } else {
-          // Termination: mark warp as finished (matching SIMTight: completedWarps <== completedWarps.val + 1)
-          // For now, just mark all threads as finished
+          // Termination: mark warp as finished
           for (size_t t = 0; t < warp->size; t++) {
             warp->finished[t] = true;
           }
@@ -1436,8 +1343,6 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     case 0x831: {
       uint64_t args = gpu_controller->get_arg_ptr();
       // CSR 0x831 returns 32-bit address (as per SIMTight)
-      // The address is 32-bit, but we need to preserve it correctly when storing in int register
-      // Cast to uint32_t first to get the lower 32 bits, then to int (which will preserve the bit pattern)
       uint32_t args_u32 = static_cast<uint32_t>(args);
       int args_32 = static_cast<int>(args_u32);
       rf->set_register(warp->warp_id, thread, rd_reg, args_32, warp->is_cpu);
@@ -1490,8 +1395,6 @@ bool ExecutionUnit::noclpush(Warp *warp, std::vector<size_t> active_threads,
 }
 bool ExecutionUnit::noclpop(Warp *warp, std::vector<size_t> active_threads,
                             MCInst *in) {
-  // noclPop() semantics: causes threads to converge by waiting for all threads
-  // that were active at the previous noclPush(). 
   for (auto thread : active_threads) {
     warp->nesting_level[thread]--;
     warp->pc[thread] += 4;
@@ -1519,7 +1422,6 @@ ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf,
 
 void ExecuteSuspend::execute() {
   // Check if we have a warp to process (either new or retrying)
-  // Matching SIMTight: warps stay in execute stage when retrying
   if (!PipelineStage::input_latch->updated)
     return;
   
@@ -1529,7 +1431,6 @@ void ExecuteSuspend::execute() {
       PipelineStage::input_latch->active_threads;
 
   // Matching SIMTight: count suspension bubble when a suspended warp enters execute stage
-  // This happens when the scheduler chooses a suspended warp (creating a pipeline bubble)
   if (warp->suspended && !warp->is_cpu) {
     GPUStatisticsManager::instance().increment_gpu_susps();
   }
@@ -1542,9 +1443,7 @@ void ExecuteSuspend::execute() {
   // - Warp keeps retrying the same instruction until canPut becomes true
   // - Instruction is NOT counted
   // - Retries are counted every cycle the warp is retrying
-  // Matching SIMTight: retry is per-thread (per-lane), stored in thread state
-  // Matching SIMTight: retry counter increments once per cycle when any retry is active
-  // Check if warp was already retrying (before processing this cycle)
+  // - retry is per-thread (per-lane), stored in thread state
   bool was_retrying = false;
   for (auto thread : active_threads) {
     if (warp->retrying[thread]) {
@@ -1561,7 +1460,7 @@ void ExecuteSuspend::execute() {
   
   if (!result.success && !warp->suspended && !warp->is_cpu) {
     // Retry needed: stay in execute stage, count retry, don't count instruction
-    // PC was NOT updated in instruction function, so it stays the same
+
     // Count retry for this cycle (if not already counted above)
     if (!was_retrying) {
       GPUStatisticsManager::instance().increment_gpu_retries();
@@ -1570,29 +1469,23 @@ void ExecuteSuspend::execute() {
     for (auto thread : active_threads) {
       warp->retrying[thread] = true;
     }
-    // Warp stays in execute stage - keep input_latch updated so it's processed again next cycle (matches SIMTight: retryWire.val keeps warp in execute with same PC)
     PipelineStage::input_latch->updated = true;
-    PipelineStage::output_latch->updated = false;  // No output on retry
-    return;  // Don't process further - warp stays in execute and will retry next cycle
+    PipelineStage::output_latch->updated = false;
+    return;
   } else {
-    // Instruction succeeded or warp was suspended - clear retry flag for all active threads
     for (auto thread : active_threads) {
       warp->retrying[thread] = false;
     }
   }
 
-  // Count instructions only if successful and not retried (matching SIMTight:
-  // "when (inv retryWire.val) do incInstrCount <== true")
   if (result.success && result.counted) {
     if (!warp->is_cpu) {
-      GPUStatisticsManager::instance().increment_gpu_instrs(
-          active_threads.size());
+      GPUStatisticsManager::instance().increment_gpu_instrs(active_threads.size());
     } else {
       GPUStatisticsManager::instance().increment_cpu_instrs();
     }
   }
 
-  // Reinsert warp logic (matching SIMTight): if instruction succeeded and warp not suspended, reinsert; if suspended, don't reinsert yet (will resume later)
   if (!warp->suspended) {
     // Warp not suspended: reinsert it (instruction succeeded)
     for (int i = 0; i < warp->size; i++) {
@@ -1601,11 +1494,9 @@ void ExecuteSuspend::execute() {
         break;
       }
     }
-    PipelineStage::input_latch->updated = false;
-  } else {
-    // Warp is suspended (by functional unit or memory), will be resumed later
-    PipelineStage::input_latch->updated = false;
   }
+  PipelineStage::input_latch->updated = false;
+  
   // We use the updated flag to tell the writeback/resume stage
   // whether or not to "perform a writeback" or to check for memory
   // responses or functional unit completions

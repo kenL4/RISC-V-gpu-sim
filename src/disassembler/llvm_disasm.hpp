@@ -86,6 +86,7 @@ public:
       } else if (buf_substr == "00000000:08 00") {
         in.setOpcode(0xFD);
         // TODO: Implement cache line flush
+        // The GPU has no cache so probably unnecessary to model
       }
     }
     return in;
