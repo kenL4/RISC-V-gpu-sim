@@ -44,10 +44,10 @@ void WritebackResume::execute() {
     }
     
     PipelineStage::input_latch->updated = false;
-    PipelineStage::output_latch->updated = true;  // Signal that warp was resumed
+    PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = warp;
-    PipelineStage::output_latch->active_threads = {};  // Will be set by next stage
-    PipelineStage::output_latch->inst = llvm::MCInst();  // No instruction for resume
+    PipelineStage::output_latch->active_threads = {};
+    PipelineStage::output_latch->inst = llvm::MCInst();
 
     std::string name = warp->is_cpu ? "CPU" : "Warp " + std::to_string(warp->warp_id);
     log("Writeback/Resume",

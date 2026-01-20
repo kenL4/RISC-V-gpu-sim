@@ -21,35 +21,27 @@ void RegisterFile::ensure_warp_initialized(uint64_t warp_id) {
 }
 
 int RegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cpu) {
-    // CPU should never use GPU RegisterFile directly - it should use HostRegisterFile
     // If CPU tries to access, return 0 (shouldn't happen, but handle gracefully)
-    if (is_cpu) {
-        return 0;
-    }
+    if (is_cpu) return 0;
+
     // RISC-V x0 (zero register) always returns 0, regardless of what's stored
-    if (reg == llvm::RISCV::X0) {
-        return 0;
-    }
+    if (reg == llvm::RISCV::X0) return 0;
     ensure_warp_initialized(warp_id);
     return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }
 
 void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value, bool is_cpu) {
-    // CPU should never use GPU RegisterFile directly - it should use HostRegisterFile
     // If CPU tries to access, ignore it (shouldn't happen, but handle gracefully)
-    if (is_cpu) {
-        return;
-    }
+    if (is_cpu) return;
     ensure_warp_initialized(warp_id);
 
     // Don't write to X0 (zero register) - it's always 0
-    if (reg != llvm::RISCV::X0) {
-        int reg_idx = get_register_idx(reg);
-        // Bounds check to prevent segfault
-        if (reg_idx >= 0 && reg_idx < static_cast<int>(registers_per_warp) && 
-            thread >= 0 && thread < static_cast<int>(thread_count)) {
-            warp_id_to_registers[warp_id][reg_idx][thread] = value;
-        }
+    if (reg != llvm::RISCV::X0) return;
+
+    int reg_idx = get_register_idx(reg);
+    if (reg_idx >= 0 && reg_idx < static_cast<int>(registers_per_warp) && 
+        thread >= 0 && thread < static_cast<int>(thread_count)) {
+        warp_id_to_registers[warp_id][reg_idx][thread] = value;
     }
 }
 
@@ -79,6 +71,9 @@ RegisterFile::~RegisterFile() {
 
 }
 
+/*
+ * TODO: Make this look good
+ */
 void RegisterFile::pretty_print(uint64_t warp_id) {
     if (warp_id_to_registers.find(warp_id) == warp_id_to_registers.end()) {
         std::cout << "No registers for warp " << warp_id << "\n";

@@ -9,8 +9,8 @@ public:
   // Kernel config
   void set_pc(uint64_t pc);
   void set_arg_ptr(uint64_t ptr);
-  void set_dims(uint64_t dims);  // Deprecated/unused - kept for compatibility
-  void set_warps_per_block(unsigned n);  // Set warps per block for barrier synchronization
+  void set_dims(uint64_t dims);  // Deprecated/unused
+  void set_warps_per_block(unsigned n);
 
   // GPU-side accessors
   uint64_t get_arg_ptr();
@@ -37,5 +37,6 @@ private:
   bool gpu_active;
 
   std::string buf;
-  unsigned stat_value = 0;  // Value for SIMTGet CSR (0x825)
+    // Value for SIMTGet CSR (0x825)
+  unsigned stat_value = 0;
 };
