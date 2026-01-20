@@ -174,7 +174,6 @@ int main(int argc, char *argv[]) {
   gpu_controller.set_pipeline(gpu_pipeline);
 
   // Execute the threads
-  // Matching SIMTight: pipelineActive stays true from kernel launch until all warps terminate
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages() ||
          gpu_pipeline->is_pipeline_active()) {
@@ -183,15 +182,11 @@ int main(int argc, char *argv[]) {
     gpu_pipeline->execute();
     cu.tick();
 
-    // Count cycles every cycle the GPU pipeline is active (matching SIMTight)
-    // SIMTight counts cycles when pipelineActive is true, which is active
-    // from kernel launch until all warps terminate
     if (gpu_pipeline->is_pipeline_active()) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
     }
     
     if (gpu_pipeline->is_pipeline_active() && !gpu_pipeline->has_active_stages()) {
-      // All warps have completed - set pipeline_active = false
       gpu_pipeline->set_pipeline_active(false);
     }
   }

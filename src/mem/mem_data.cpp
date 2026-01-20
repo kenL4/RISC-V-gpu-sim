@@ -56,7 +56,6 @@ std::vector<uint32_t> DataMemory::get_memory_region(uint64_t addr, size_t count)
   result.reserve(count);
   
   for (size_t i = 0; i < count; i++) {
-    // Read 4 bytes (32-bit pixel) in little-endian format
     uint64_t pixel_addr = addr + (i * 4);
     uint32_t pixel = 0;
     

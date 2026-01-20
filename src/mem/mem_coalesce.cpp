@@ -10,26 +10,17 @@
 #include <iomanip>
 #include <cstdint>
 
-// Use centralized config values from config.hpp
-// SIM_DRAM_LATENCY = 30 (matching SIMTight)
-// DRAM_BEAT_BYTES = 64 (DRAM beat size)
-
 CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
     : scratchpad_mem(scratchpad_mem) {
 }
 
 bool CoalescingUnit::can_put() {
-  // Matching SIMTight: memReqs.canPut checks only the INPUT queue capacity (32)
-  // The pipeline capacity (inflightCount = 4) is checked separately when consuming from input queue
-  // In SIMTight, canPut only checks memReqsQueue.notFull (input queue), not the pipeline capacity
-  // This matches the behavior where retries occur when the input queue is full
   return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
 }
 
+// Uses the SameAddress and SameBlock strategies
 int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
                                      size_t access_size, bool is_store) {
-  // SIMTight coalescing strategy implementation with iterative processing
-  // SIMTight has 32 lanes and 64-byte (512-bit) DRAM beats
   constexpr size_t LOG_LANES = 5;
 
   if (addrs.empty()) {
@@ -41,16 +32,17 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
   for (size_t lane = 0; lane < addrs.size(); lane++) {
     uint64_t addr = addrs[lane];
     uint64_t addr_32 = 0xFFFFFFFF & addr;
+
     // Skip SRAM region (shared SRAM)
+    // In the real GPU, these would be rerouted via a switching network
     if (SIM_SHARED_SRAM_BASE <= addr_32 && addr_32 < SIM_SIMT_STACK_BASE) {
       continue;
     }
+
     pending.push_back({lane, addr});
   }
 
-  if (pending.empty()) {
-    return 0;
-  }
+  if (pending.empty()) return 0;
 
   int total_dram_accesses = 0;
 
@@ -64,9 +56,7 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
     std::vector<size_t> same_block_lanes;
     std::vector<size_t> same_addr_lanes;
 
-    // SameBlock and SameAddress are computed relative to leader
     uint64_t leader_block = leader_addr >> (LOG_LANES + 2);
-    // For SameAddress: lower LOG_LANES+2 bits must match
     uint64_t leader_low_bits = leader_addr & ((1ULL << (LOG_LANES + 2)) - 1);
 
     for (const auto &[lane, addr] : pending) {
@@ -75,7 +65,6 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
       bool in_same_block = (block == leader_block);
 
       // Check SameAddress: sameBlock AND lower LOG_LANES+2 bits match
-      // In SIMTight: sameAddr = sameBlock && (a1[6:0] == a2[6:0])
       uint64_t low_bits = addr & ((1ULL << (LOG_LANES + 2)) - 1);
       if (in_same_block && low_bits == leader_low_bits) {
         same_addr_lanes.push_back(lane);
@@ -120,7 +109,7 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
       }
     }
 
-    // Choose strategy: use SameBlock if it satisfies leader AND at least one
+    // Use SameBlock if it satisfies leader AND at least one
     // other lane
     bool use_same_block =
         (same_block_lanes.size() > 1) &&
@@ -158,13 +147,8 @@ int CoalescingUnit::calculate_bursts(const std::vector<uint64_t> &addrs,
 
 int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
                                            size_t access_size) {
-  // Count the number of coalesced requests (not bursts)
-  // This is used for store access counting in SIMTight (stores count 1 per request)
   constexpr size_t LOG_LANES = 5;
-
-  if (addrs.empty()) {
-    return 0;
-  }
+  if (addrs.empty()) return 0;
 
   // Build list of (lane_id, addr) pairs for DRAM requests only
   std::vector<std::pair<size_t, uint64_t>> pending;
@@ -178,10 +162,7 @@ int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
     pending.push_back({lane, addr});
   }
 
-  if (pending.empty()) {
-    return 0;
-  }
-
+  if (pending.empty()) return 0;
   int request_count = 0;
 
   // Iterative coalescing: process lanes until all are served
@@ -267,24 +248,19 @@ int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
   return request_count;
 }
 
+/*
+ * This stack translation strategy is my own one for simplicity
+ * SIMTight uses an interleaving strategy for better coalescing
+ */
 uint64_t CoalescingUnit::translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id) {
   // Check if address is in the stack region
   uint64_t addr_32 = virtual_addr & 0xFFFFFFFF;
-  if (addr_32 < SIM_SIMT_STACK_BASE) {
-    // Not a stack address, return as-is
-    return virtual_addr;
-  }
-  
-  // Calculate offset from stack base
+  if (addr_32 < SIM_SIMT_STACK_BASE) return virtual_addr;
   uint64_t offset = addr_32 - SIM_SIMT_STACK_BASE;
   
   if (warp->is_cpu) {
-    // CPU gets its own stack space
-    // Translate to CPU stack region
     uint64_t cpu_offset = offset;
     // CPU stack starts at SIM_CPU_STACK_BASE and grows down
-    // For simplicity, we'll map the stack region to CPU stack space
-    // CPU stack size is 1GB, so we can map the entire stack region there
     return (virtual_addr & 0xFFFFFFFF00000000ULL) | (SIM_CPU_STACK_BASE + cpu_offset);
   } else {
     // GPU thread: translate to per-thread physical stack
@@ -330,8 +306,6 @@ void CoalescingUnit::suspend_warp(Warp *warp,
   // Each DRAM transaction has SIM_DRAM_LATENCY cycles of latency
   // Multiple transactions are pipelined, so total latency = base latency + additional bursts
   // For simplicity, use: SIM_DRAM_LATENCY + (bursts - 1) if bursts > 0
-  // This models pipelined DRAM access where first access has full latency, 
-  // subsequent ones are pipelined with minimal additional latency
   int latency;
   if (dram_bursts == 0) {
     // If no DRAM accesses (e.g., all accesses to SRAM), use minimal latency
@@ -352,7 +326,6 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
                           bool is_zero_extend) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
-  // Queue the request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
   req.warp = warp;
   req.addrs = addrs;
@@ -365,14 +338,9 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.active_threads = active_threads;
   pending_request_queue.push(req);
   
-  // Suspend warp immediately (request will be processed in tick(), results stored and written when warp resumes)
   warp->suspended = true;
-  
-  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
   int dram_bursts = calculate_bursts(addrs, bytes, false);
-  int dram_access_count = dram_bursts;  // For loads, count burst length
-  
-  // Count DRAM accesses
+  int dram_access_count = dram_bursts;
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -381,10 +349,10 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
     }
   }
   
-  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  // Add warp to blocked_warps immediately with full latency
   int latency;
   if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+    latency = COALESCING_PIPELINE_DEPTH + 1;
   } else if (dram_bursts == 1) {
     latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
   } else {
@@ -398,7 +366,6 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
                            const std::vector<size_t> &active_threads) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
-  // Queue the request (matching SIMTight: requests go into queue before processing)
   MemRequest req;
   req.warp = warp;
   req.addrs = addrs;
@@ -407,17 +374,12 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   req.is_atomic = false;
   req.is_fence = false;
   req.store_values = vals;
-  req.active_threads = active_threads;  // Store active_threads to track which thread is at each index
+  req.active_threads = active_threads;
   pending_request_queue.push(req);
   
-  // Suspend warp immediately (request will be processed in tick())
   warp->suspended = true;
-  
-  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
   int dram_bursts = calculate_bursts(addrs, bytes, true);
-  int dram_access_count = calculate_request_count(addrs, bytes);  // For stores, count request count
-  
-  // Count DRAM accesses
+  int dram_access_count = calculate_request_count(addrs, bytes);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -426,10 +388,10 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
     }
   }
   
-  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  // Add warp to blocked_warps immediately with full latency
   int latency;
   if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+    latency = COALESCING_PIPELINE_DEPTH + 1;
   } else {
     // For stores, latency is pipeline + DRAM latency
     latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
@@ -438,10 +400,10 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
 }
 
 void CoalescingUnit::fence(Warp *warp) {
-  // Queue the fence request (matching SIMTight: requests go into queue before processing)
+  // Queue the fence request
   MemRequest req;
   req.warp = warp;
-  req.addrs = {};  // Fence doesn't need addresses
+  req.addrs = {};
   req.bytes = 0;
   req.is_store = false;
   req.is_atomic = false;
@@ -449,9 +411,7 @@ void CoalescingUnit::fence(Warp *warp) {
   req.active_threads = {};
   pending_request_queue.push(req);
   
-  // Suspend warp immediately (fence will be processed in tick(), warp resumes when complete)
   warp->suspended = true;
-  
   // A bit of a hack
   blocked_warps[warp] = MEM_REQ_QUEUE_CAPACITY;
 }
@@ -460,7 +420,7 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
                                  size_t bytes, unsigned int rd_reg,
                                  const std::vector<int> &add_values,
                                  const std::vector<size_t> &active_threads) {
-  // Queue the atomic add request (matching SIMTight: requests go into queue before processing)
+  // Queue the atomic add request
   MemRequest req;
   req.warp = warp;
   req.addrs = addrs;
@@ -473,16 +433,9 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   req.active_threads = active_threads;
   pending_request_queue.push(req);
   
-  // Suspend warp immediately (request will be processed in tick())
-  // Results will be stored and written when warp resumes
   warp->suspended = true;
-  
-  // Calculate DRAM bursts and count DRAM accesses (matching suspend_warp logic)
-  // Atomic operations have same latency as stores
   int dram_bursts = calculate_bursts(addrs, bytes, true);
-  int dram_access_count = calculate_request_count(addrs, bytes);  // For stores/atomics, count request count
-  
-  // Count DRAM accesses
+  int dram_access_count = calculate_request_count(addrs, bytes);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -491,10 +444,10 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
     }
   }
   
-  // Add warp to blocked_warps immediately with full latency (pipeline + DRAM: COALESCING_PIPELINE_DEPTH cycles, then DRAM latency)
+  // Add warp to blocked_warps immediately with full latency
   int latency;
   if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;  // Pipeline + minimal latency
+    latency = COALESCING_PIPELINE_DEPTH + 1;
   } else {
     latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
   }
@@ -502,9 +455,6 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
 }
 
 bool CoalescingUnit::is_busy() { 
-  // Unit is busy if there are pending requests in queue OR blocked warps
-  // This matches the test expectation: after load() is called, the unit should be busy
-  // even though the request hasn't been processed yet (it's in the queue)
   return !pending_request_queue.empty() || !blocked_warps.empty();
 }
 
@@ -515,23 +465,6 @@ bool CoalescingUnit::is_busy_for_pipeline(bool is_cpu_pipeline) {
     }
   }
   return false;
-}
-
-Warp *CoalescingUnit::get_resumable_warp() {
-  Warp *resumable_warp = nullptr;
-
-  for (auto &[key, val] : blocked_warps) {
-    if (val == 0) {
-      resumable_warp = key;
-      break;
-    }
-  }
-
-  if (resumable_warp == nullptr)
-    return nullptr;
-
-  blocked_warps.erase(resumable_warp);
-  return resumable_warp;
 }
 
 Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
@@ -609,12 +542,8 @@ void CoalescingUnit::tick() {
   // 1. Advance requests in pipeline_queue (increment cycles_in_pipeline)
   // 2. Process requests that have completed pipeline (cycles_in_pipeline >= DEPTH)
   // 3. Move requests from pending_queue to pipeline_queue (if pipeline has space)
-  // Note: Order matters - we advance existing pipeline requests BEFORE adding new ones
-  // so new requests don't get advanced in the same cycle they're added
   
   // Step 1 & 2: Advance pipeline and process completed requests
-  // Track if we processed any requests this cycle (pipeline busy condition)
-  // In SIMTight, when stage 5 is busy (go5.val), the pipeline stalls and doesn't consume from input queue
   bool requests_processed_this_cycle = false;
   size_t pipeline_size = pipeline_queue.size();
   for (size_t i = 0; i < pipeline_size; i++) {
@@ -633,8 +562,7 @@ void CoalescingUnit::tick() {
     }
   }
   
-  // Step 3: Move requests from pending to pipeline (matching SIMTight: consume when (NOT stalled OR NOT go1) AND NOT in feedback)
-  // Since we don't model DRAM queue stalls, we can always consume when there's space
+  // Step 3: Move requests from pending to pipeline
   bool go1_active = !pipeline_queue.empty();
   bool stalled = false;
   bool can_consume = (!stalled || !go1_active);
@@ -658,10 +586,6 @@ void CoalescingUnit::tick() {
 
 void CoalescingUnit::process_mem_request(const MemRequest &req) {
   if (req.is_fence) {
-    // Process memory fence: ensure all previous memory operations complete
-    // Matching SIMTight: memGlobalFenceOp ensures memory ordering
-    // The fence must wait for all pending memory operations from the same warp to complete
-    // Check if there are any pending requests from this warp still in the queues
     bool has_pending_ops = false;
     
     // Check pending_request_queue (operations queued after the fence)
@@ -686,68 +610,42 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
       }
     }
     
-    // If there are pending operations, delay fence completion
-    // The fence should not complete until all previous operations from this warp complete
+    // If there are pending operations, delay fence completion (latency choice is a hack)
     if (has_pending_ops && blocked_warps.find(req.warp) != blocked_warps.end()) {
-      // Extend the latency to wait for pending operations to complete
-      // Use a conservative estimate: max pipeline depth + some buffer
       blocked_warps[req.warp] = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + 5;
     }
-    // If no pending operations, fence completes (latency was already set in fence())
-    // Note: The fence latency in fence() is 2 * COALESCING_PIPELINE_DEPTH, which should
-    // be enough if there are no pending operations
   } else if (req.is_atomic) {
     // Process atomic add: read old value, add to it, write back, return old value
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
       uint64_t virtual_addr = req.addrs[i];
-      // Translate stack address to physical per-thread address
       uint64_t addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
-      // Read old value
+
       int64_t old_value = scratchpad_mem->load(addr, req.bytes);
-      // Add the increment value
       int64_t new_value = old_value + req.atomic_add_values[i];
-      // Write new value back
+
       scratchpad_mem->store(addr, req.bytes, static_cast<uint64_t>(new_value));
-      // Return old value (will be written to rd_reg when warp resumes)
       results[req.active_threads[i]] = static_cast<int>(old_value);
     }
     
-    // Store results with rd_reg (will be written to registers when warp resumes)
     load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
-    
-    // Warp was already added to blocked_warps when request was queued
-    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
-    // No need to call suspend_warp again - latency was already set correctly
   } else if (req.is_store) {
     // Process store: write to memory
-    // Note: For stores, addresses and values are indexed by thread order from active_threads
-    // If thread 0 is first in active_threads, then index 0 corresponds to thread 0
-    // CRITICAL: addresses and values must have the same size
-    assert(req.addrs.size() == req.store_values.size() && 
-           "Store request: addresses and values must have same size");
+    assert(req.addrs.size() == req.store_values.size() && "Store request: addresses and values must have same size");
     
     for (size_t i = 0; i < req.addrs.size(); i++) {
       uint64_t virtual_addr = req.addrs[i];
-      // Translate stack address to physical per-thread address
       uint64_t addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
       uint64_t val = static_cast<uint64_t>(req.store_values[i]);
-      
       scratchpad_mem->store(addr, req.bytes, val);
     }
-    
-    // Warp was already added to blocked_warps when request was queued
-    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
-    // No need to call suspend_warp again - latency was already set correctly
   } else {
     // Process load: read from memory and store results
     std::map<size_t, int> results;
     for (size_t i = 0; i < req.addrs.size(); i++) {
       uint64_t virtual_addr = req.addrs[i];
-      // Translate stack address to physical per-thread address
       uint64_t base_addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
       
-      // Read raw bytes from memory
       uint64_t raw = 0;
       for (int j = 0; j < req.bytes; j++) {
         uint64_t addr = base_addr + j;
@@ -767,12 +665,7 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
       results[req.active_threads[i]] = static_cast<int>(value);
     }
     
-    // Store results with rd_reg (will be written to registers when warp resumes)
     load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
-    
-    // Warp was already added to blocked_warps when request was queued
-    // Just need to count DRAM accesses (suspend_warp does this, but we already did it)
-    // No need to call suspend_warp again - latency was already set correctly
   }
 }
 
@@ -783,38 +676,30 @@ std::pair<unsigned int, std::map<size_t, int>> CoalescingUnit::get_load_results(
     load_results_map.erase(it);  // Remove after retrieving
     return results;
   }
-  return std::make_pair(0, std::map<size_t, int>());  // Empty if no results
+  return std::make_pair(0, std::map<size_t, int>());
 }
 
 bool CoalescingUnit::has_pending_memory_ops(Warp *warp) {
   // If warp is suspended, it has pending memory operations (can't enter barrier while suspended)
-  if (warp->suspended) {
-    return true;
-  }
+  if (warp->suspended) return true;
   
   // Check if warp is blocked with pending memory operations
   auto blocked_it = blocked_warps.find(warp);
-  if (blocked_it != blocked_warps.end() && blocked_it->second > 0) {
-    return true;  // Warp has pending memory operations with remaining latency
-  }
+  if (blocked_it != blocked_warps.end() && blocked_it->second > 0) return true;
   
   // Check pending_request_queue for this warp
   std::queue<MemRequest> temp_queue = pending_request_queue;
   while (!temp_queue.empty()) {
-    if (temp_queue.front().warp == warp) {
-      return true;  // Found pending request for this warp
-    }
+    if (temp_queue.front().warp == warp) return true;
     temp_queue.pop();
   }
   
   // Check pipeline_queue for this warp
   std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
   while (!temp_pipeline.empty()) {
-    if (temp_pipeline.front().req.warp == warp) {
-      return true;  // Found request in pipeline for this warp
-    }
+    if (temp_pipeline.front().req.warp == warp) return true;
     temp_pipeline.pop();
   }
   
-  return false;  // No pending memory operations
+  return false;
 }

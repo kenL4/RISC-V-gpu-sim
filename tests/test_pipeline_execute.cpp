@@ -75,7 +75,7 @@ void complete_load_operation(CoalescingUnit &cu, RegisterFile &rf, Warp *warp) {
   // Use a safety limit to prevent infinite loops
   for (int i = 0; i < 1000; ++i) {
     cu.tick();
-    Warp *resumed = cu.get_resumable_warp();
+    Warp *resumed = cu.get_resumable_warp_for_pipeline(warp->is_cpu);
     if (resumed != nullptr && resumed == warp) {
       // Get load results and write them back
       auto load_results = cu.get_load_results(warp);

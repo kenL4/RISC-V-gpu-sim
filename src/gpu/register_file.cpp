@@ -36,7 +36,7 @@ void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value
     ensure_warp_initialized(warp_id);
 
     // Don't write to X0 (zero register) - it's always 0
-    if (reg != llvm::RISCV::X0) return;
+    if (reg == llvm::RISCV::X0) return;
 
     int reg_idx = get_register_idx(reg);
     if (reg_idx >= 0 && reg_idx < static_cast<int>(registers_per_warp) && 

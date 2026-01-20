@@ -6,89 +6,57 @@
 #include <queue>
 #include <map>
 
-// Memory request structure for queueing (matching SIMTight's queue model)
 struct MemRequest {
   Warp *warp;
   std::vector<uint64_t> addrs;
   size_t bytes;
   bool is_store;
-  bool is_atomic;  // Is this an atomic operation?
-  bool is_fence;   // Is this a memory fence operation?
-  bool is_zero_extend;  // For loads: true = zero-extend (lbu, lhu), false = sign-extend (lb, lh, lw)
+  bool is_atomic;
+  bool is_fence;
+  bool is_zero_extend;
   std::vector<int> store_values;  // Only used for stores
   std::vector<int> atomic_add_values;  // Only used for atomic add operations
-  unsigned int rd_reg;  // Destination register for loads and atomic operations
-  std::vector<size_t> active_threads;  // Active threads for this request
+  unsigned int rd_reg;
+  std::vector<size_t> active_threads;
 };
 
 class CoalescingUnit {
 public:
   CoalescingUnit(DataMemory *scratchpad_mem);
   
-  // Check if memory request queue can accept new requests (matching SIMTight canPut)
-  // Returns false when queue is full, causing retries
   bool can_put();
-  
-  // Queue a load request (returns immediately, results stored and written on resume)
-  // is_zero_extend: true for unsigned loads (lbu, lhu), false for signed loads (lb, lh, lw)
   void load(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
             unsigned int rd_reg, const std::vector<size_t> &active_threads,
             bool is_zero_extend = false);
-  
-  // Queue a store request (returns immediately)
   void store(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
              const std::vector<int> &vals, const std::vector<size_t> &active_threads);
-  
-  // Queue an atomic add request (returns immediately, old values stored and written on resume)
-  // Performs: old_value = *addr; *addr = old_value + add_value; return old_value
   void atomic_add(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
                   unsigned int rd_reg, const std::vector<int> &add_values,
                   const std::vector<size_t> &active_threads);
-  
-  // Queue a memory fence request (returns immediately, warp suspended until fence completes)
-  // Matching SIMTight: FENCE sends memGlobalFenceOp to memory unit
   void fence(Warp *warp);
   
   bool is_busy();
   bool is_busy_for_pipeline(bool is_cpu_pipeline);
-  Warp *get_resumable_warp();
   Warp *get_resumable_warp_for_pipeline(bool is_cpu_pipeline);
   void tick();
   
-  // Suspend warp for a given number of cycles (for functional unit latencies)
   void suspend_warp_latency(Warp *warp, size_t latency);
-  
-  // Get stored load results for a warp (called when warp resumes)
-  // Returns pair of (rd_reg, thread_id -> value map), or empty pair if no results
   std::pair<unsigned int, std::map<size_t, int>> get_load_results(Warp *warp);
-
-  // Check if a warp has pending memory operations (for barrier synchronization)
-  // Returns true if the warp has pending stores, loads, or atomics in the queues
   bool has_pending_memory_ops(Warp *warp);
 
 private:
   std::map<Warp *, size_t> blocked_warps;
   DataMemory *scratchpad_mem;
-  
-  // Queue of pending memory requests (matching SIMTight's memReqsQueue)
-  // Requests are queued before processing, and processed one per cycle in tick()
   std::queue<MemRequest> pending_request_queue;
   
-  // Pipeline model: requests stay in pipeline for multiple cycles
-  // SIMTight coalescing unit has 5 pipeline stages, so requests take ~5 cycles
-  // We model this by keeping requests in the queue for pipeline_depth cycles
-  // before they can be processed
   struct PipelineRequest {
     MemRequest req;
-    size_t cycles_in_pipeline;  // How many cycles this request has been in pipeline
+    size_t cycles_in_pipeline;
   };
-  std::queue<PipelineRequest> pipeline_queue;  // Requests currently in pipeline
+  std::queue<PipelineRequest> pipeline_queue;
   static constexpr size_t COALESCING_PIPELINE_DEPTH = 5;  // Matching SIMTight's 5-stage pipeline
   
-  // Store load results by warp (thread_id -> value)
-  // Results are written to registers when warp resumes
-  std::map<Warp *, std::pair<unsigned int, std::map<size_t, int>>> load_results_map;  // rd_reg -> (thread_id -> value)
-
+  std::map<Warp *, std::pair<unsigned int, std::map<size_t, int>>> load_results_map;
   void suspend_warp(Warp *warp, const std::vector<uint64_t> &addrs,
                     size_t access_size, bool is_store);
   int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size,
@@ -99,7 +67,5 @@ private:
   // All threads see the same virtual stack addresses, but hardware translates
   // them to separate physical stacks per thread
   uint64_t translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id);
-  
-  // Process a queued memory request (called from tick())
   void process_mem_request(const MemRequest &req);
 };

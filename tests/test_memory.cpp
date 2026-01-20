@@ -90,7 +90,7 @@ void test_coalesce_latency() {
   int ticks = 0;
   while (unit.is_busy()) {
     unit.tick();
-    Warp *resumed = unit.get_resumable_warp();
+    Warp *resumed = unit.get_resumable_warp_for_pipeline(w.is_cpu);
     if (resumed) {
       assert(resumed == &w);
     }
