@@ -2,6 +2,7 @@
 #include "mem_data.hpp"
 #include "config.hpp"
 #include "gen/llvm_riscv_registers.h"
+#include "stats/stats.hpp"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -10,8 +11,11 @@
 #include <iomanip>
 #include <cstdint>
 
-CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem)
+CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem, const std::string *trace_file)
     : scratchpad_mem(scratchpad_mem) {
+  if (trace_file != nullptr) {
+    tracer = std::make_unique<Tracer>(*trace_file);
+  }
 }
 
 bool CoalescingUnit::can_put() {
@@ -248,6 +252,111 @@ int CoalescingUnit::calculate_request_count(const std::vector<uint64_t> &addrs,
   return request_count;
 }
 
+std::vector<uint64_t> CoalescingUnit::compute_coalesced_addresses(const std::vector<uint64_t> &addrs,
+                                                                   size_t access_size) {
+  constexpr size_t LOG_LANES = 5;
+  std::vector<uint64_t> coalesced_addrs;
+  
+  if (addrs.empty()) return coalesced_addrs;
+
+  // Build list of (lane_id, addr) pairs for DRAM requests only
+  std::vector<std::pair<size_t, uint64_t>> pending;
+  for (size_t lane = 0; lane < addrs.size(); lane++) {
+    uint64_t addr = addrs[lane];
+    uint64_t addr_32 = 0xFFFFFFFF & addr;
+    // Skip SRAM region (shared SRAM)
+    if (SIM_SHARED_SRAM_BASE <= addr_32 && addr_32 < SIM_SIMT_STACK_BASE) {
+      continue;
+    }
+    pending.push_back({lane, addr});
+  }
+
+  if (pending.empty()) return coalesced_addrs;
+
+  // Iterative coalescing: process lanes until all are served
+  while (!pending.empty()) {
+    // Pick the first pending lane as the leader
+    size_t leader_lane = pending[0].first;
+    uint64_t leader_addr = pending[0].second;
+
+    // Compute coalescing masks based on leader
+    std::vector<size_t> same_block_lanes;
+    std::vector<size_t> same_addr_lanes;
+
+    // SameBlock and SameAddress are computed relative to leader
+    uint64_t leader_block = leader_addr >> (LOG_LANES + 2);
+    uint64_t leader_low_bits = leader_addr & ((1ULL << (LOG_LANES + 2)) - 1);
+
+    for (const auto &[lane, addr] : pending) {
+      uint64_t block = addr >> (LOG_LANES + 2);
+      bool in_same_block = (block == leader_block);
+
+      uint64_t low_bits = addr & ((1ULL << (LOG_LANES + 2)) - 1);
+      if (in_same_block && low_bits == leader_low_bits) {
+        same_addr_lanes.push_back(lane);
+      }
+
+      if (in_same_block) {
+        bool matches = false;
+
+        if (access_size >= 4) {
+          uint64_t sub_word = addr & 0x3;
+          uint64_t leader_sub_word = leader_addr & 0x3;
+          uint64_t lane_bits = (addr >> 2) & (NUM_LANES - 1);
+          if (sub_word == leader_sub_word && lane_bits == lane) {
+            matches = true;
+          }
+        } else if (access_size == 2) {
+          uint64_t upper_bit = (addr >> (LOG_LANES + 1)) & 0x1;
+          uint64_t leader_upper = (leader_addr >> (LOG_LANES + 1)) & 0x1;
+          uint64_t lane_bits = (addr >> 1) & (NUM_LANES - 1);
+          if (upper_bit == leader_upper && lane_bits == lane) {
+            matches = true;
+          }
+        } else {
+          uint64_t upper_bits = (addr >> LOG_LANES) & 0x3;
+          uint64_t leader_upper = (leader_addr >> LOG_LANES) & 0x3;
+          uint64_t lane_bits = addr & (NUM_LANES - 1);
+          if (upper_bits == leader_upper && lane_bits == lane) {
+            matches = true;
+          }
+        }
+
+        if (matches) {
+          same_block_lanes.push_back(lane);
+        }
+      }
+    }
+
+    bool use_same_block =
+        (same_block_lanes.size() > 1) &&
+        (std::find(same_block_lanes.begin(), same_block_lanes.end(),
+                   leader_lane) != same_block_lanes.end());
+
+    std::vector<size_t> *served_lanes;
+    if (use_same_block) {
+      served_lanes = &same_block_lanes;
+    } else {
+      served_lanes = &same_addr_lanes;
+    }
+
+    // Add the leader address to coalesced addresses (this represents the coalesced group)
+    coalesced_addrs.push_back(leader_addr);
+
+    // Remove served lanes from pending
+    std::set<size_t> served_set(served_lanes->begin(), served_lanes->end());
+    std::vector<std::pair<size_t, uint64_t>> remaining;
+    for (const auto &p : pending) {
+      if (served_set.find(p.first) == served_set.end()) {
+        remaining.push_back(p);
+      }
+    }
+    pending = std::move(remaining);
+  }
+
+  return coalesced_addrs;
+}
+
 /*
  * This stack translation strategy is my own one for simplicity
  * SIMTight uses an interleaving strategy for better coalescing
@@ -326,6 +435,24 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
                           bool is_zero_extend) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
   
+  // Trace addresses coming into coalescing unit (skip CPU warps)
+  if (tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.warp_id = warp->warp_id;
+    // Use PC of first active thread, or thread 0 if no active threads
+    if (!active_threads.empty() && active_threads[0] < warp->pc.size()) {
+      event.pc = warp->pc[active_threads[0]];
+    } else if (!warp->pc.empty()) {
+      event.pc = warp->pc[0];
+    } else {
+      event.pc = 0;
+    }
+    event.event_type = MEM_REQ_ISSUE;
+    event.addrs = addrs;
+    tracer->trace_event(event);
+  }
+  
   MemRequest req;
   req.warp = warp;
   req.addrs = addrs;
@@ -365,6 +492,24 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
                            size_t bytes, const std::vector<int> &vals,
                            const std::vector<size_t> &active_threads) {
   // Note: Caller should check can_put() before calling this function. If queue is full, caller should retry.
+  
+  // Trace addresses coming into coalescing unit (skip CPU warps)
+  if (tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.warp_id = warp->warp_id;
+    // Use PC of first active thread, or thread 0 if no active threads
+    if (!active_threads.empty() && active_threads[0] < warp->pc.size()) {
+      event.pc = warp->pc[active_threads[0]];
+    } else if (!warp->pc.empty()) {
+      event.pc = warp->pc[0];
+    } else {
+      event.pc = 0;
+    }
+    event.event_type = MEM_REQ_ISSUE;
+    event.addrs = addrs;
+    tracer->trace_event(event);
+  }
   
   MemRequest req;
   req.warp = warp;
@@ -421,6 +566,25 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
                                  const std::vector<int> &add_values,
                                  const std::vector<size_t> &active_threads) {
   // Queue the atomic add request
+  
+  // Trace addresses coming into coalescing unit (skip CPU warps)
+  if (tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.warp_id = warp->warp_id;
+    // Use PC of first active thread, or thread 0 if no active threads
+    if (!active_threads.empty() && active_threads[0] < warp->pc.size()) {
+      event.pc = warp->pc[active_threads[0]];
+    } else if (!warp->pc.empty()) {
+      event.pc = warp->pc[0];
+    } else {
+      event.pc = 0;
+    }
+    event.event_type = MEM_REQ_ISSUE;
+    event.addrs = addrs;
+    tracer->trace_event(event);
+  }
+  
   MemRequest req;
   req.warp = warp;
   req.addrs = addrs;
@@ -585,6 +749,37 @@ void CoalescingUnit::tick() {
 }
 
 void CoalescingUnit::process_mem_request(const MemRequest &req) {
+  // Trace addresses going out of coalescing unit (after translation and coalescing, skip CPU warps)
+  if (tracer && !req.is_fence && !req.warp->is_cpu) {
+    // First translate all addresses
+    std::vector<uint64_t> translated_addrs;
+    for (size_t i = 0; i < req.addrs.size(); i++) {
+      uint64_t virtual_addr = req.addrs[i];
+      uint64_t addr = translate_stack_address(virtual_addr, req.warp, req.active_threads[i]);
+      translated_addrs.push_back(addr);
+    }
+    
+    // Then compute coalesced addresses (one per coalesced group)
+    std::vector<uint64_t> coalesced_addrs = compute_coalesced_addresses(translated_addrs, req.bytes);
+    
+    if (!coalesced_addrs.empty()) {
+      TraceEvent event;
+      event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+      event.warp_id = req.warp->warp_id;
+      // Use PC of first active thread, or thread 0 if no active threads
+      if (!req.active_threads.empty() && req.active_threads[0] < req.warp->pc.size()) {
+        event.pc = req.warp->pc[req.active_threads[0]];
+      } else if (!req.warp->pc.empty()) {
+        event.pc = req.warp->pc[0];
+      } else {
+        event.pc = 0;
+      }
+      event.event_type = DRAM_REQ_ISSUE;
+      event.addrs = coalesced_addrs;
+      tracer->trace_event(event);
+    }
+  }
+  
   if (req.is_fence) {
     bool has_pending_ops = false;
     

@@ -3,8 +3,10 @@
 #include "gpu/pipeline.hpp"
 #include "mem_data.hpp"
 #include "utils.hpp"
+#include "trace/trace.hpp"
 #include <queue>
 #include <map>
+#include <memory>
 
 struct MemRequest {
   Warp *warp;
@@ -22,7 +24,7 @@ struct MemRequest {
 
 class CoalescingUnit {
 public:
-  CoalescingUnit(DataMemory *scratchpad_mem);
+  CoalescingUnit(DataMemory *scratchpad_mem, const std::string *trace_file = nullptr);
   
   bool can_put();
   void load(Warp *warp, const std::vector<uint64_t> &addrs, size_t bytes,
@@ -57,11 +59,17 @@ private:
   static constexpr size_t COALESCING_PIPELINE_DEPTH = 5;  // Matching SIMTight's 5-stage pipeline
   
   std::map<Warp *, std::pair<unsigned int, std::map<size_t, int>>> load_results_map;
+  std::unique_ptr<Tracer> tracer;
+  
   void suspend_warp(Warp *warp, const std::vector<uint64_t> &addrs,
                     size_t access_size, bool is_store);
   int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size,
                        bool is_store);
   int calculate_request_count(const std::vector<uint64_t> &addrs, size_t access_size);
+  
+  // Compute coalesced addresses (one per coalesced group) for DRAM requests
+  std::vector<uint64_t> compute_coalesced_addresses(const std::vector<uint64_t> &addrs,
+                                                      size_t access_size);
   
   // Translate virtual stack address to physical per-thread stack address
   // All threads see the same virtual stack addresses, but hardware translates

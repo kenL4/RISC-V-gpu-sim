@@ -92,6 +92,8 @@ int main(int argc, char *argv[]) {
                             cxxopts::value<uint64_t>()->default_value("64"))(
       "framebuffer-output", "Output BMP filename for framebuffer",
                             cxxopts::value<std::string>()->default_value("framebuffer.bmp"))(
+      "trace-file", "Enable coalescing unit address tracing (specify filename, e.g. --trace-file=trace.log)",
+                            cxxopts::value<std::string>())(
       "q,quick", "Disable buffering for outputting earlier than simulation end")(
       "h,help", "Show help");
   options.parse_positional({"filename"});
@@ -151,7 +153,17 @@ int main(int argc, char *argv[]) {
   }
   
   debug_log("Instantiated memory scratchpad for the SM");
-  CoalescingUnit cu(&scratchpad_mem);
+  
+  // Set up tracing if requested
+  std::string trace_file;
+  const std::string *trace_file_ptr = nullptr;
+  if (result.count("trace-file")) {
+    trace_file = result["trace-file"].as<std::string>();
+    trace_file_ptr = &trace_file;
+    debug_log("Coalescing unit tracing enabled: " + trace_file);
+  }
+  
+  CoalescingUnit cu(&scratchpad_mem, trace_file_ptr);
   debug_log("Instantiated memory coalescing unit");
 
   RegisterFile rf(NUM_REGISTERS, NUM_LANES);
