@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 
 enum EventType {
     MEM_REQ_ISSUE,
@@ -32,12 +33,12 @@ public:
 
     void trace_event(TraceEvent event) {
         file << event.cycle << "," 
-             << event.pc << "," 
+             << "0x" << std::hex << std::setfill('0') << std::setw(8) << event.pc << std::dec << "," 
              << event.warp_id << ","
              << event.event_type << std::endl;
         if (event.event_type == MEM_REQ_ISSUE || event.event_type == DRAM_REQ_ISSUE) {
             for (uint64_t addr : event.addrs) {
-                file << addr << ",";
+                file << "0x" << std::hex << std::setfill('0') << std::setw(8) << addr << std::dec << ",";
             }
             file << std::endl;
         }
