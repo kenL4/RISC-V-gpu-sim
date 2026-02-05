@@ -9,21 +9,21 @@ Retries: 00000000
 DRAMAccs: 00000696
 Self test: PASSED
 Running kernel: Samples/Histogram
-Cycles: 0000172f
+Cycles: 00001738
 Instrs: 0002c908
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000005e6
 Self test: PASSED
 Running kernel: Samples/Reduce
-Cycles: 000031bd
+Cycles: 000031c1
 Instrs: 0005ce4e
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 0000057d
 Self test: PASSED
 Running kernel: Samples/Scan
-Cycles: 00008413
+Cycles: 00008408
 Instrs: 000fc004
 Susps: 00000000
 Retries: 00000000
@@ -37,7 +37,7 @@ Retries: 00000000
 DRAMAccs: 000010c0
 Self test: PASSED
 Running kernel: Samples/MatVecMul
-Cycles: 00003a99
+Cycles: 00003bbf
 Instrs: 00068780
 Susps: 00000000
 Retries: 00000000
@@ -51,28 +51,28 @@ Retries: 00000000
 DRAMAccs: 00001480
 Self test: PASSED
 Running kernel: Samples/BitonicSortSmall
-Cycles: 0001b02b
+Cycles: 0001b063
 Instrs: 002eeb60
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 00001680
 Self test: PASSED
 Running kernel: Samples/BitonicSortLarge
-Cycles: 00049a18
+Cycles: 00049c79
 Instrs: 007c77f8
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000015c0
-Cycles: 0004c193
-Instrs: 00813043
+Cycles: 0000277d
+Instrs: 0004b84b
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00002480
-Cycles: 00059624
-Instrs: 0098cb13
+DRAMAccs: 00000ec0
+Cycles: 0000d514
+Instrs: 00179ad0
 Susps: 00000000
 Retries: 00000000
-DRAMAccs: 00003ac0
+DRAMAccs: 00001640
 Self test: PASSED
 Running kernel: Samples/SparseMatVecMul
 Cycles: 00001179
@@ -82,7 +82,7 @@ Retries: 00000000
 DRAMAccs: 00000d5d
 Self test: PASSED
 Running kernel: InHouse/BlockedStencil
-Cycles: 00003947
+Cycles: 0000397c
 Instrs: 0006c380
 Susps: 00000000
 Retries: 00000000
@@ -96,14 +96,14 @@ Retries: 00000000
 DRAMAccs: 00000f38
 Self test: PASSED
 Running kernel: InHouse/VecGCD
-Cycles: 000022f8
+Cycles: 000022b6
 Instrs: 0002075b
 Susps: 00000000
 Retries: 00000000
 DRAMAccs: 000004d4
 Self test: PASSED
 Running kernel: InHouse/MotionEst
-Cycles: 0000817e
+Cycles: 00008317
 Instrs: 000da11c
 Susps: 00000000
 Retries: 00000000

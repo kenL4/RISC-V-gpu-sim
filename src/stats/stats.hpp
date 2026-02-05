@@ -21,6 +21,12 @@ public:
   void increment_gpu_retries();
   void increment_gpu_susps();
 
+  void reset_gpu_cycles();
+  void reset_gpu_instrs();
+  void reset_gpu_dram_accs();
+  void reset_gpu_retries();
+  void reset_gpu_susps();
+
   uint64_t get_cpu_instrs();
   uint64_t get_cpu_dram_accs();
   void increment_cpu_instrs();

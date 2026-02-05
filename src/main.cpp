@@ -16,12 +16,14 @@
 #include "mem/mem_coalesce.hpp"
 #include "mem/mem_data.hpp"
 #include "mem/mem_instr.hpp"
+#include "trace/trace.hpp"
 #include "utils.hpp"
 
 // Initialize pipeline (CPU is modelled as 1x1 GPU for simplicity)
 Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
                               RegisterFile *rf, LLVMDisassembler *disasm,
-                              HostGPUControl *gpu_controller, bool is_cpu) {
+                              HostGPUControl *gpu_controller, bool is_cpu,
+                              Tracer *instr_tracer = nullptr) {
   Pipeline *p = new Pipeline();
 
   // Construct stages (matching SIMTight's 7-stage pipeline)
@@ -44,6 +46,10 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
       std::dynamic_pointer_cast<ExecuteSuspend>(p->get_stage(5));
   std::shared_ptr<WritebackResume> writeback_stage =
       std::dynamic_pointer_cast<WritebackResume>(p->get_stage(6));
+
+  if (instr_tracer) {
+    execute_stage->set_instr_tracer(instr_tracer);
+  }
   
   // Set up warp insertion callback (used by both execute and writeback stages)
   auto insert_warp_callback = [ws = warp_scheduler_stage](Warp *warp) {
@@ -93,6 +99,9 @@ int main(int argc, char *argv[]) {
       "framebuffer-output", "Output BMP filename for framebuffer",
                             cxxopts::value<std::string>()->default_value("framebuffer.bmp"))(
       "trace-file", "Enable coalescing unit address tracing (specify filename, e.g. --trace-file=trace.log)",
+                            cxxopts::value<std::string>())(
+      "trace-coalesce", "Write coalesce (MEM_REQ_ISSUE, DRAM_REQ_ISSUE) to trace-file; by default coalesce logs are hidden")(
+      "instr-trace-file", "Trace all GPU instruction execution (specify filename, e.g. --instr-trace-file=instr.log)",
                             cxxopts::value<std::string>())(
       "q,quick", "Disable buffering for outputting earlier than simulation end")(
       "h,help", "Show help");
@@ -154,13 +163,21 @@ int main(int argc, char *argv[]) {
   
   debug_log("Instantiated memory scratchpad for the SM");
   
-  // Set up tracing if requested
+  // Set up tracing if requested (coalesce logs hidden unless --trace-coalesce)
   std::string trace_file;
   const std::string *trace_file_ptr = nullptr;
   if (result.count("trace-file")) {
     trace_file = result["trace-file"].as<std::string>();
-    trace_file_ptr = &trace_file;
-    debug_log("Coalescing unit tracing enabled: " + trace_file);
+    if (result.count("trace-coalesce")) {
+      trace_file_ptr = &trace_file;
+      debug_log("Coalescing unit tracing enabled: " + trace_file);
+    }
+  }
+
+  std::unique_ptr<Tracer> instr_tracer;
+  if (result.count("instr-trace-file")) {
+    instr_tracer = std::make_unique<Tracer>(result["instr-trace-file"].as<std::string>());
+    debug_log("Instruction tracing (warp 1 thread 1) enabled");
   }
   
   CoalescingUnit cu(&scratchpad_mem, trace_file_ptr);
@@ -174,7 +191,8 @@ int main(int argc, char *argv[]) {
   // Initialization
   HostGPUControl gpu_controller;
   Pipeline *gpu_pipeline =
-      initialize_pipeline(&tcim, &cu, &rf, &disasm, &gpu_controller, false);
+      initialize_pipeline(&tcim, &cu, &rf, &disasm, &gpu_controller, false,
+                          instr_tracer ? instr_tracer.get() : nullptr);
   Pipeline *cpu_pipeline =
       initialize_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller, true);
 

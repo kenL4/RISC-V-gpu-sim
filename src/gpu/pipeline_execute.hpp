@@ -2,6 +2,8 @@
 #include "host/host_gpu_control.hpp"
 #include "mem/mem_coalesce.hpp"
 #include "pipeline.hpp"
+#include "trace/trace.hpp"
+#include "stats/stats.hpp"
 #include "pipeline_warp_scheduler.hpp"
 #include "register_file.hpp"
 #include "utils.hpp"
@@ -111,6 +113,7 @@ public:
   }
   bool is_active() override;
   ExecutionUnit *get_execution_unit() { return eu; }
+  void set_instr_tracer(Tracer *t) { instr_tracer = t; }
   ~ExecuteSuspend();
 
 private:
@@ -118,4 +121,5 @@ private:
   ExecutionUnit *eu;
   LLVMDisassembler *disasm;
   uint64_t max_addr;
+  Tracer *instr_tracer = nullptr;
 };

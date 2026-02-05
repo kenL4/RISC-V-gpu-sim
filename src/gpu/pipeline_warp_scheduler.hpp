@@ -28,6 +28,9 @@ private:
   int warp_count;
   std::queue<Warp *> warp_queue;
   std::queue<Warp *> new_warp_queue;
+  // 1-cycle re-insertion delay (matching SIMTight's extra pipeline latency, e.g. Stage 1 substages)
+  std::queue<Warp *> reinsert_delay_queue;  // warps that completed this cycle, available next cycle
+  std::queue<Warp *> reinsert_ready;       // warps that completed last cycle, merge into warp_queue this cycle
   bool active = true;
   bool warp_issued_this_cycle = false;
 

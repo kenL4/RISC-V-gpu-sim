@@ -31,7 +31,9 @@ void ActiveThreadSelection::execute() {
   // 1st substage: Compute active threads (matching SIMTight's 1st substage)
   // Matching SIMTight: Active threads are those with the max nesting level
   // On a tie, favour instructions undergoing a retry
-  // Active threads match the leader's state exactly (PC + nesting_level + retry)
+  // Tie-breaking: SIMTight's pipelinedTree1 uses maxOf where (a > b) then a else b, so on
+  // equality the *second* wins; the tree thus picks the highest lane index when all tie.
+  // We match by using (value >= leader_value) so we keep the *last* (highest index) with max.
   if (!PipelineStage::input_latch->updated) {
     return;
   }
@@ -43,7 +45,7 @@ void ActiveThreadSelection::execute() {
   for (int i = 0; i < warp->size; i++) {
     if (warp->finished[i]) continue;
     uint64_t value = (warp->nesting_level[i] << 1) | (warp->retrying[i] ? 1 : 0);
-    if (leader_idx == -1 || value > leader_value) {
+    if (leader_idx == -1 || value >= leader_value) {
       leader_idx = i;
       leader_value = value;
     }

@@ -1,4 +1,5 @@
 #include "host_gpu_control.hpp"
+#include "../stats/stats.hpp"
 #include "config.hpp"
 
 HostGPUControl::HostGPUControl()
@@ -17,6 +18,13 @@ void HostGPUControl::set_warps_per_block(unsigned n) {
 uint64_t HostGPUControl::get_arg_ptr() { return arg_ptr; }
 
 void HostGPUControl::launch_kernel() {
+  // Reset statistics
+  GPUStatisticsManager::instance().reset_gpu_cycles();
+  GPUStatisticsManager::instance().reset_gpu_instrs();
+  GPUStatisticsManager::instance().reset_gpu_dram_accs();
+  GPUStatisticsManager::instance().reset_gpu_retries();
+  GPUStatisticsManager::instance().reset_gpu_susps();
+  
   for (int i = 0; i < NUM_WARPS; i++) {
     Warp *warp = new Warp(i, NUM_LANES, kernel_pc, false);
     scheduler->insert_warp(warp);

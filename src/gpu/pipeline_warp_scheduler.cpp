@@ -21,6 +21,11 @@ WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
 }
 
 void WarpScheduler::flush_new_warps() {
+  // Warps that completed last cycle are in reinsert_ready; merge them first (1-cycle delay, matching SIMTight).
+  while (!reinsert_ready.empty()) {
+    new_warp_queue.push(reinsert_ready.front());
+    reinsert_ready.pop();
+  }
   while (new_warp_queue.size() > 0) {
     warp_queue.push(new_warp_queue.front());
     new_warp_queue.pop();
@@ -66,6 +71,8 @@ void WarpScheduler::execute() {
   }
 
   // 1st substage: Choose a warp for next cycle (matching SIMTight's 1st substage)
+  // Swap delay queue with ready: warps that completed last cycle (now in reinsert_ready) become available this cycle.
+  reinsert_ready.swap(reinsert_delay_queue);
   flush_new_warps();
 
   barrier_bits = 0;
@@ -137,11 +144,14 @@ void WarpScheduler::execute() {
 }
 
 bool WarpScheduler::is_active() {
-  return warp_queue.size() > 0 || new_warp_queue.size() > 0 || chosen_warp_buffer != nullptr;
+  return warp_queue.size() > 0 || new_warp_queue.size() > 0 ||
+         reinsert_delay_queue.size() > 0 || reinsert_ready.size() > 0 ||
+         chosen_warp_buffer != nullptr;
 }
 
-void WarpScheduler::insert_warp(Warp *warp) { 
-  new_warp_queue.push(warp);
+void WarpScheduler::insert_warp(Warp *warp) {
+  // Delay re-insertion by 1 cycle so warp becomes available next cycle (match SIMTight pipeline latency).
+  reinsert_delay_queue.push(warp);
   if (warp->warp_id < 64) {
     all_warps[warp->warp_id] = warp;
   }
@@ -256,6 +266,8 @@ WarpScheduler::~WarpScheduler() {
     delete warp_queue.front();
     warp_queue.pop();
   }
+  while (reinsert_delay_queue.size() > 0) reinsert_delay_queue.pop();
+  while (reinsert_ready.size() > 0) reinsert_ready.pop();
 
   log("Warp Scheduler", "Destroyed pipeline stage");
 }

@@ -9,6 +9,12 @@ uint64_t GPUStatisticsManager::get_gpu_susps() { return gpu_susps; }
 uint64_t GPUStatisticsManager::get_cpu_instrs() { return cpu_instrs; }
 uint64_t GPUStatisticsManager::get_cpu_dram_accs() { return cpu_dram_accs; }
 
+void GPUStatisticsManager::reset_gpu_cycles() { gpu_cycles = 0; }
+void GPUStatisticsManager::reset_gpu_instrs() { gpu_instrs = 0; }
+void GPUStatisticsManager::reset_gpu_dram_accs() { gpu_dram_accs = 0; }
+void GPUStatisticsManager::reset_gpu_retries() { gpu_retries = 0; }
+void GPUStatisticsManager::reset_gpu_susps() { gpu_susps = 0; }
+
 void GPUStatisticsManager::increment_gpu_cycles() { gpu_cycles++; }
 void GPUStatisticsManager::increment_gpu_instrs(size_t warp_size) { gpu_instrs += warp_size; }
 void GPUStatisticsManager::increment_gpu_dram_accs() { gpu_dram_accs++; }

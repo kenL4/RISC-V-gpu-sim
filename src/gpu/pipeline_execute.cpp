@@ -2,6 +2,7 @@
 #include "../disassembler/llvm_disasm.hpp"
 #include "../stats/stats.hpp"
 #include "../config.hpp"
+#include <algorithm>
 #include <climits>
 #include <sstream>
 #include <iomanip>
@@ -1429,6 +1430,22 @@ void ExecuteSuspend::execute() {
   MCInst inst = PipelineStage::input_latch->inst;
   std::vector<size_t> active_threads =
       PipelineStage::input_latch->active_threads;
+
+  // Trace instruction execution for all GPU warps and all active threads (for comparison with SIMTight)
+  if (instr_tracer && !warp->is_cpu) {
+    uint64_t cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    for (size_t tid : active_threads) {
+      if (tid < warp->pc.size()) {
+        TraceEvent event;
+        event.cycle = cycle;
+        event.pc = warp->pc[tid];
+        event.warp_id = warp->warp_id;
+        event.lane_id = static_cast<int>(tid);
+        event.event_type = INSTR_EXEC;
+        instr_tracer->trace_event(event);
+      }
+    }
+  }
 
   // Matching SIMTight: count suspension bubble when a suspended warp enters execute stage
   if (warp->suspended && !warp->is_cpu) {
