@@ -2,12 +2,7 @@
 This project is a software simulator for a RISC-V GPU model, intended to be used a substrate to test and develop GPU kernels.
 
 ## Dependencies
-We need a RISC-V compiler, and LLVM for disassembly.<br>
-On Ubuntu 24.04, we can do:
-```
-sudo apt install gcc-riscv64-unknown-elf
-```
-You must also install LLVM 22 with ```RISCV``` as one of the targets and install it to ```PATH```. On Ubuntu, we can do:
+We need to install LLVM 22 with ```RISCV``` as one of the targets and install it to ```PATH```. On Ubuntu, we can do:
 ```
 wget https://apt.llvm.org/llvm.sh
 chmod +x llvm.sh

@@ -2,6 +2,7 @@
 #include <array>
 #include <iomanip>
 #include "cxxopts.hpp"
+#include "custom_instrs.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline.hpp"
 #include "gpu/pipeline_ats.hpp"
@@ -23,7 +24,8 @@
 Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
                               RegisterFile *rf, LLVMDisassembler *disasm,
                               HostGPUControl *gpu_controller, bool is_cpu,
-                              Tracer *instr_tracer = nullptr) {
+                              Tracer *instr_tracer = nullptr,
+                              const std::vector<CustomInstrEntry> *custom_instrs = nullptr) {
   Pipeline *p = new Pipeline();
 
   // Construct stages (matching SIMTight's 7-stage pipeline)
@@ -37,7 +39,7 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   p->add_stage<OperandFetch>();                              // Stage 3
   p->add_stage<OperandLatch>();                              // Stage 4
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
-                               gpu_controller);              // Stage 5
+                               gpu_controller, custom_instrs); // Stage 5
   p->add_stage<WritebackResume>(cu, rf, is_cpu);            // Stage 6
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
@@ -103,6 +105,8 @@ int main(int argc, char *argv[]) {
       "trace-coalesce", "Write coalesce (MEM_REQ_ISSUE, DRAM_REQ_ISSUE) to trace-file; by default coalesce logs are hidden")(
       "instr-trace-file", "Trace all GPU instruction execution (specify filename, e.g. --instr-trace-file=instr.log)",
                             cxxopts::value<std::string>())(
+      "custom-instrs", "Custom instructions config file (name, opcode, byte pattern, handler). Default: custom_instrs.txt in cwd",
+                            cxxopts::value<std::string>())(
       "q,quick", "Disable buffering for outputting earlier than simulation end")(
       "h,help", "Show help");
   options.parse_positional({"filename"});
@@ -123,6 +127,18 @@ int main(int argc, char *argv[]) {
 
   std::string filename = result["filename"].as<std::string>();
 
+  // Load custom instructions (optional)
+  std::vector<CustomInstrEntry> custom_instrs_storage;
+  const std::vector<CustomInstrEntry> *custom_instrs_ptr = nullptr;
+  std::string custom_instrs_path =
+      result.count("custom-instrs") ? result["custom-instrs"].as<std::string>() : "custom_instrs.txt";
+  custom_instrs_storage = load_custom_instrs(custom_instrs_path);
+  if (!custom_instrs_storage.empty()) {
+    custom_instrs_ptr = &custom_instrs_storage;
+    debug_log("Loaded " + std::to_string(custom_instrs_storage.size()) +
+              " custom instruction(s) from " + custom_instrs_path);
+  }
+
   // Initialize LLVM machine code decoding (RISC-V only)
   LLVMInitializeRISCVTargetInfo();
   LLVMInitializeRISCVTargetMC();
@@ -131,7 +147,7 @@ int main(int argc, char *argv[]) {
   std::string target_id = "riscv64-unknown-elf";
   std::string cpu = "generic-rv64";
   std::string features = "+m,+a,+zfinx";
-  LLVMDisassembler disasm(target_id, cpu, features);
+  LLVMDisassembler disasm(target_id, cpu, features, custom_instrs_ptr);
 
   debug_log("Loading ELF file...");
   parse_output out;
@@ -192,9 +208,9 @@ int main(int argc, char *argv[]) {
   HostGPUControl gpu_controller;
   Pipeline *gpu_pipeline =
       initialize_pipeline(&tcim, &cu, &rf, &disasm, &gpu_controller, false,
-                          instr_tracer ? instr_tracer.get() : nullptr);
+                          instr_tracer ? instr_tracer.get() : nullptr, custom_instrs_ptr);
   Pipeline *cpu_pipeline =
-      initialize_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller, true);
+      initialize_pipeline(&tcim, &cu, &hrf, &disasm, &gpu_controller, true, nullptr, custom_instrs_ptr);
 
   gpu_pipeline->set_debug(true);
   cpu_pipeline->set_debug(config.isCPUDebug());

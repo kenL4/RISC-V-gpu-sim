@@ -1,0 +1,17 @@
+# Custom instructions: two formats (one per line, # = comment).
+#
+# (1) Byte-prefix:  NAME OPCODE BYTE_PATTERN_HEX [HANDLER]
+#     Matches when instruction bytes start with BYTE_PATTERN (e.g. 0900).
+#
+# (2) Mask+value:   NAME OPCODE mask=MASK value=VALUE [HANDLER]
+#     Matches when (insn32 & MASK) == VALUE (insn = 4 bytes little-endian).
+#
+# Spec: decodeSIMT [ "0000000 <5> <5> 000 <5> 0001001" -> NOCL_PUSH
+#                    "0000000 <5> <5> 001 <5> 0001001" -> NOCL_POP ]
+#       decodeCacheMgmt [ "0000000 rs2 rs1 000 rd 0001000" -> CACHE_FLUSH_LINE ]
+# RISC-V: bits 0-6 opcode, 7-11 rd, 12-14 funct3, 15-19 rs1, 20-24 rs2, 25-31 funct7.
+# Mask 0x707F = opcode (7) + funct3 (3 at 12); value = opcode | (funct3<<12).
+#
+NOCLPUSH 0xFF mask=0x707F value=0x0009 noclpush
+NOCLPOP  0xFE mask=0x707F value=0x1009 noclpop
+CACHE_LINE_FLUSH 0xFD mask=0x707F value=0x0008 cache_line_flush
