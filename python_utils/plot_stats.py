@@ -54,6 +54,7 @@ def read_simtight_trace(file, expand_subkernels=False):
                     "Susps": 0,
                     "Retries": 0,
                     "DRAMAccs": 0,
+                    "WallTime_ms": 0,
                 }
 
             block, line = _read_one_stat_block(f, first_line=first_line)
@@ -70,8 +71,13 @@ def read_simtight_trace(file, expand_subkernels=False):
                 # Consume remaining stat blocks for this kernel and aggregate
                 while True:
                     line = f.readline()
-                    if not line or line.strip().startswith("Running kernel") or line.strip().startswith("Self test"):
+                    if not line or line.strip().startswith("Running kernel"):
                         break
+                    if line.strip().startswith("WallTime_ms:"):
+                        data[kernel]["WallTime_ms"] = int(line.split(":")[1].strip())
+                        continue
+                    if line.strip().startswith("Self test"):
+                        continue
                     if line.strip().startswith("Cycles:"):
                         block, line = _read_one_stat_block(f, first_line=line)
                         for k, v in block.items():
@@ -83,7 +89,13 @@ def read_simtight_trace(file, expand_subkernels=False):
                 break
 
             line = f.readline()
-            if not line or not line.strip().startswith("Cycles:"):
+            if not line:
+                break
+            if line.strip().startswith("WallTime_ms:"):
+                data[kernel]["WallTime_ms"] = int(line.split(":")[1].strip())
+                line = f.readline()
+                break
+            if not line.strip().startswith("Cycles:"):
                 break
             first_line = line  # next iteration reads a block starting with this line
     return data
@@ -170,12 +182,23 @@ def plot_gpu_retries(data, simtight):
     fig.show()
 
 
+def plot_walltime(data, simtight):
+    kernels = _common_kernels(data, simtight)
+    mine_vals = [data[name].get("WallTime_ms", 0) for name in kernels]
+    simtight_vals = [simtight[name].get("WallTime_ms", 0) for name in kernels]
+    fig = _bar_fig(
+        kernels, mine_vals, simtight_vals, "Wall Time (ms)", "Wall-Clock Time by GPU, Kernel"
+    )
+    fig.show()
+
+
 def plot_gpu_all(data, simtight):
     """Show each metric in its own figure."""
     plot_dram_accs(data, simtight)
     plot_gpu_cycles(data, simtight)
     plot_gpu_instrs(data, simtight)
     plot_ipc(data, simtight)
+    plot_walltime(data, simtight)
 
 
 SINGLE_KERNEL_METRICS = [

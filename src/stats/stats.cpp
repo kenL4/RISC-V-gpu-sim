@@ -22,3 +22,10 @@ void GPUStatisticsManager::increment_gpu_retries() { gpu_retries++; }
 void GPUStatisticsManager::increment_gpu_susps() { gpu_susps++; }
 void GPUStatisticsManager::increment_cpu_instrs() { cpu_instrs++; }
 void GPUStatisticsManager::increment_cpu_dram_accs() { cpu_dram_accs++; }
+
+uint64_t GPUStatisticsManager::get_gpu_active_cpu_dram_accs() { return gpu_active_cpu_dram_accs; }
+void GPUStatisticsManager::increment_gpu_active_cpu_dram_accs() { gpu_active_cpu_dram_accs++; }
+void GPUStatisticsManager::reset_gpu_active_cpu_dram_accs() { gpu_active_cpu_dram_accs = 0; }
+
+void GPUStatisticsManager::set_gpu_pipeline_active(bool active) { gpu_pipeline_active_flag = active; }
+bool GPUStatisticsManager::is_gpu_pipeline_active() { return gpu_pipeline_active_flag; }

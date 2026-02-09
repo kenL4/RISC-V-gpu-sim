@@ -208,6 +208,8 @@ int main(int argc, char *argv[]) {
          gpu_pipeline->has_active_stages() ||
          gpu_pipeline->is_pipeline_active()) {
     
+    GPUStatisticsManager::instance().set_gpu_pipeline_active(gpu_pipeline->is_pipeline_active());
+
     cpu_pipeline->execute();
     gpu_pipeline->execute();
     cu.tick();

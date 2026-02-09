@@ -24,6 +24,7 @@ void HostGPUControl::launch_kernel() {
   GPUStatisticsManager::instance().reset_gpu_dram_accs();
   GPUStatisticsManager::instance().reset_gpu_retries();
   GPUStatisticsManager::instance().reset_gpu_susps();
+  GPUStatisticsManager::instance().reset_gpu_active_cpu_dram_accs();
   
   for (int i = 0; i < NUM_WARPS; i++) {
     Warp *warp = new Warp(i, NUM_LANES, kernel_pc, false);

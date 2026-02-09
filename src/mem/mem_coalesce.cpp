@@ -437,14 +437,10 @@ void CoalescingUnit::suspend_warp(Warp *warp,
   int dram_bursts = calculate_bursts(addrs, access_size, is_store);
   
   // Count DRAM accesses matching SIMTight behavior:
-  // - For loads: count the burst length (number of beats in the burst)
-  // - For stores: count 1 per store request (regardless of burst length)
-  int dram_access_count;
-  if (is_store) {
-    dram_access_count = calculate_request_count(addrs, access_size);
-  } else {
-    dram_access_count = dram_bursts;  // For loads, count burst length
-  }
+  // Both loads and stores count by burst length. SIMTight's coalescing unit
+  // issues burstLen separate DRAM requests for stores, each adding 1 to
+  // dramStoreSig; for loads, dramLoadSig = burstLen fires once.
+  int dram_access_count = dram_bursts;
   
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
@@ -529,6 +525,9 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
+      if (GPUStatisticsManager::instance().is_gpu_pipeline_active()) {
+        GPUStatisticsManager::instance().increment_gpu_active_cpu_dram_accs();
+      }
     } else {
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }
@@ -582,12 +581,17 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   blocked_warps[warp] = latency;
 
   // Count DRAM accesses on interleaved physical addresses
+  // SIMTight's coalescing unit issues burstLen separate DRAM requests for stores
+  // (one per beat), and each fires dramStoreSig=1 in the DRAM wrapper, so stores
+  // should be counted by burst length (same as loads), not 1 per coalesced group.
   std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
-  // For stores, count 1 per coalesced request (matching SIMTight's dramStoreSig = 1)
-  int dram_access_count = calculate_request_count(phys_addrs, bytes);
+  int dram_access_count = calculate_bursts(phys_addrs, bytes, true);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
+      if (GPUStatisticsManager::instance().is_gpu_pipeline_active()) {
+        GPUStatisticsManager::instance().increment_gpu_active_cpu_dram_accs();
+      }
     } else {
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }
@@ -660,12 +664,16 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   blocked_warps[warp] = latency;
 
   // Count DRAM accesses on interleaved physical addresses
+  // Atomics use store path in SIMTight, which issues burstLen DRAM requests per
+  // coalesced group (same reasoning as stores above).
   std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
-  // For atomics (like stores), count 1 per coalesced request (matching SIMTight's dramStoreSig = 1)
-  int dram_access_count = calculate_request_count(phys_addrs, bytes);
+  int dram_access_count = calculate_bursts(phys_addrs, bytes, true);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
+      if (GPUStatisticsManager::instance().is_gpu_pipeline_active()) {
+        GPUStatisticsManager::instance().increment_gpu_active_cpu_dram_accs();
+      }
     } else {
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }

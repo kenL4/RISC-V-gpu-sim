@@ -1,59 +1,67 @@
 Running kernel: Samples/VecAdd
-Cycles: 00001904
+Cycles: 000018d8
 Instrs: 00026918
 Susps: 00000000
-Retries: 000003be
+Retries: 000003ab
 DRAMAccs: 00000874
 Self test: PASSED
+WallTime_ms: 14128
 Running kernel: Samples/Histogram
-Cycles: 00001c2a
+Cycles: 00001c5e
 Instrs: 0002c8c8
 Susps: 00000000
-Retries: 000003e9
+Retries: 000003fa
 DRAMAccs: 0000082e
 Self test: PASSED
+WallTime_ms: 12055
 Running kernel: Samples/Reduce
-Cycles: 000036fe
+Cycles: 000036ff
 Instrs: 0005cdee
 Susps: 00000000
 Retries: 000003db
 DRAMAccs: 000006fd
 Self test: PASSED
+WallTime_ms: 8134
 Running kernel: Samples/Scan
-Cycles: 000089d2
+Cycles: 000089d1
 Instrs: 000fbfe4
 Susps: 00000000
 Retries: 00000630
 DRAMAccs: 00000b00
 Self test: PASSED
+WallTime_ms: 14248
 Running kernel: Samples/Transpose
-Cycles: 00004844
-Instrs: 00080fe0
+Cycles: 00004834
+Instrs: 00080fc0
 Susps: 00000000
-Retries: 00000595
+Retries: 0000058e
 DRAMAccs: 00001940
 Self test: PASSED
+WallTime_ms: 63976
 Running kernel: Samples/MatVecMul
-Cycles: 00004396
+Cycles: 00004394
 Instrs: 00068740
 Susps: 00000000
-Retries: 00000560
+Retries: 0000055e
 DRAMAccs: 00001700
 Self test: PASSED
+WallTime_ms: 20361
 Running kernel: Samples/MatMul
-Cycles: 0001302b
+Cycles: 0001302c
 Instrs: 0023dfa0
 Susps: 00000000
 Retries: 00000c31
 DRAMAccs: 00002100
 Self test: PASSED
+WallTime_ms: 222135
 Running kernel: Samples/BitonicSortSmall
-Cycles: 0001d77b
+Cycles: 0001d5a5
 Instrs: 002eeb40
 Susps: 00000000
-Retries: 00002149
+Retries: 00001ee1
 DRAMAccs: 00002740
 Self test: PASSED
+WallTime_ms: 21078
 Running kernel: Samples/BitonicSortLarge
 Cycles: 00058247
 Instrs: 007c77d8
@@ -71,6 +79,7 @@ Susps: 00000000
 Retries: 00002251
 DRAMAccs: 00002400
 Self test: PASSED
+WallTime_ms: 50909
 Running kernel: Samples/SparseMatVecMul
 Cycles: 000040f9
 Instrs: 000259e0
@@ -78,6 +87,7 @@ Susps: 00000000
 Retries: 00000509
 DRAMAccs: 00000fdf
 Self test: PASSED
+WallTime_ms: 15092
 Running kernel: InHouse/BlockedStencil
 Cycles: 00004420
 Instrs: 0006c360
@@ -85,6 +95,7 @@ Susps: 00000000
 Retries: 00000824
 DRAMAccs: 00001640
 Self test: PASSED
+WallTime_ms: 25446
 Running kernel: InHouse/StripedStencil
 Cycles: 00003e05
 Instrs: 000696a0
@@ -92,6 +103,7 @@ Susps: 00000000
 Retries: 00000616
 DRAMAccs: 000018f8
 Self test: PASSED
+WallTime_ms: 26043
 Running kernel: InHouse/VecGCD
 Cycles: 00002d47
 Instrs: 000206fb
@@ -99,6 +111,7 @@ Susps: 00000000
 Retries: 000003ac
 DRAMAccs: 00000658
 Self test: PASSED
+WallTime_ms: 6596
 Running kernel: InHouse/MotionEst
 Cycles: 0000a3d7
 Instrs: 000da0dc
@@ -106,3 +119,4 @@ Susps: 00000000
 Retries: 000012d6
 DRAMAccs: 00002fa8
 Self test: PASSED
+WallTime_ms: 18100

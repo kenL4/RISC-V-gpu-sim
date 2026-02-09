@@ -20,5 +20,9 @@ make
 
 for APP in ${APPS[@]}; do
     echo "Running kernel: $APP"
+    START_NS=$(date +%s%N)
     ./build/RISCVGpuSim $APP/app.elf -s
+    END_NS=$(date +%s%N)
+    ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
+    echo "WallTime_ms: $ELAPSED_MS"
 done

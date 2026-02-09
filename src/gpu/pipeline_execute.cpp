@@ -1276,7 +1276,8 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
         val = GPUStatisticsManager::instance().get_gpu_susps();
         break;
       case 9:  // STAT_SIMT_DRAM_ACCESSES
-        val = GPUStatisticsManager::instance().get_gpu_dram_accs();
+        val = GPUStatisticsManager::instance().get_gpu_dram_accs()
+            + GPUStatisticsManager::instance().get_gpu_active_cpu_dram_accs();
         break;
       default:
         val = 0;
