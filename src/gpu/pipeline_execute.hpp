@@ -1,4 +1,3 @@
-#include "custom_instrs.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "host/host_gpu_control.hpp"
 #include "mem/mem_coalesce.hpp"
@@ -8,8 +7,6 @@
 #include "pipeline_warp_scheduler.hpp"
 #include "register_file.hpp"
 #include "utils.hpp"
-#include <functional>
-#include <unordered_map>
 
 typedef struct execute_result {
   bool success;
@@ -24,11 +21,8 @@ typedef struct execute_result {
  */
 class ExecutionUnit {
 public:
-  using CustomHandler =
-      std::function<bool(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in)>;
   ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf, LLVMDisassembler *disasm,
-                HostGPUControl *gpu_controller,
-                const std::vector<CustomInstrEntry> *custom_instrs = nullptr);
+                HostGPUControl *gpu_controller);
   execute_result execute(Warp *warp, std::vector<size_t> active_threads,
                          llvm::MCInst &inst);
 
@@ -39,15 +33,10 @@ public:
   }
 
 private:
-  void register_custom_handlers();
-  bool custom_noop(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
-
   CoalescingUnit *cu;
   RegisterFile *rf;
   LLVMDisassembler *disasm;
   HostGPUControl *gpu_controller;
-  const std::vector<CustomInstrEntry> *custom_instrs_ = nullptr;
-  std::unordered_map<std::string, CustomHandler> custom_handlers_;
   bool debug_enabled = true;
   bool add(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
   bool addi(Warp *warp, std::vector<size_t> active_threads, llvm::MCInst *in);
@@ -116,8 +105,7 @@ class ExecuteSuspend : public PipelineStage {
 public:
   std::function<void(Warp *warp)> insert_warp;
   ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr,
-                 LLVMDisassembler *disasm, HostGPUControl *gpu_controller,
-                 const std::vector<CustomInstrEntry> *custom_instrs = nullptr);
+                 LLVMDisassembler *disasm, HostGPUControl *gpu_controller);
   void execute() override;
   void set_debug(bool enabled) override {
     PipelineStage::set_debug(enabled);

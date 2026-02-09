@@ -358,30 +358,73 @@ std::vector<uint64_t> CoalescingUnit::compute_coalesced_addresses(const std::vec
 }
 
 /*
- * This stack translation strategy is my own one for simplicity
- * SIMTight uses an interleaving strategy for better coalescing
+ * Stack address translation for data operations (stores/loads in scratchpad_mem).
+ * Uses a simple per-thread layout that ensures each thread has unique physical addresses.
+ * This must be self-consistent: store(V) and load(V) for the same thread must
+ * map to the same physical address.
  */
 uint64_t CoalescingUnit::translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id) {
-  // Check if address is in the stack region
   uint64_t addr_32 = virtual_addr & 0xFFFFFFFF;
   if (addr_32 < SIM_SIMT_STACK_BASE) return virtual_addr;
   uint64_t offset = addr_32 - SIM_SIMT_STACK_BASE;
-  
+
   if (warp->is_cpu) {
-    uint64_t cpu_offset = offset;
-    // CPU stack starts at SIM_CPU_STACK_BASE and grows down
-    return (virtual_addr & 0xFFFFFFFF00000000ULL) | (SIM_CPU_STACK_BASE + cpu_offset);
+    return (virtual_addr & 0xFFFFFFFF00000000ULL) | (SIM_CPU_STACK_BASE + offset);
   } else {
-    // GPU thread: translate to per-thread physical stack
-    // Physical address = SIM_SIMT_STACK_BASE + (warp_id << (SIMT_LOG_LANES + SIMT_LOG_BYTES_PER_STACK)) 
-    //                    + (thread_id << SIMT_LOG_BYTES_PER_STACK) + offset
     uint64_t warp_offset = static_cast<uint64_t>(warp->warp_id) << (SIMT_LOG_LANES + SIMT_LOG_BYTES_PER_STACK);
     uint64_t thread_offset = static_cast<uint64_t>(thread_id) << SIMT_LOG_BYTES_PER_STACK;
     uint64_t physical_addr = SIM_SIMT_STACK_BASE + warp_offset + thread_offset + offset;
-    
-    // Preserve upper 32 bits if present (for 64-bit addresses)
     return (virtual_addr & 0xFFFFFFFF00000000ULL) | physical_addr;
   }
+}
+
+/*
+ * SIMTight-matching interleaved address for coalescing/DRAM counting purposes.
+ * From SIMTight src/Core/SIMT.hs (interleaveAddr):
+ *   If vaddr[31:19] == all 1s (stack region):
+ *     paddr = 0b11 # vaddr[18:2] # warp_id[5:0] # lane_id[4:0] # vaddr[1:0]
+ *   Else:
+ *     paddr = vaddr (unchanged)
+ *
+ * This interleaving ensures that when all lanes in a warp access the same
+ * stack offset, their physical addresses differ only in bits [6:2] (= lane_id),
+ * enabling SameBlock coalescing — matching how SIMTight's hardware counts DRAMAccs.
+ */
+uint64_t CoalescingUnit::interleave_addr_simtight(uint64_t virtual_addr, Warp *warp, size_t thread_id) {
+  uint64_t addr_32 = virtual_addr & 0xFFFFFFFF;
+
+  // SIMTight stack detection: bits [31:19] must all be 1
+  uint32_t top_bits = addr_32 >> SIMT_LOG_BYTES_PER_STACK;
+  uint32_t all_ones = (1U << (32 - SIMT_LOG_BYTES_PER_STACK)) - 1;
+  if (top_bits != all_ones) return virtual_addr;
+
+  uint32_t stackOffset = (addr_32 >> 2) & ((1U << (SIMT_LOG_BYTES_PER_STACK - 2)) - 1);
+  uint32_t wordOffset = addr_32 & 0x3;
+  uint32_t warp_id = static_cast<uint32_t>(warp->warp_id) & ((1U << SIMT_LOG_WARPS) - 1);
+  uint32_t lane_id = static_cast<uint32_t>(thread_id) & ((1U << SIMT_LOG_LANES) - 1);
+
+  uint32_t paddr = (0x3U << 30)
+                 | (stackOffset << (2 + SIMT_LOG_LANES + SIMT_LOG_WARPS))
+                 | (warp_id << (2 + SIMT_LOG_LANES))
+                 | (lane_id << 2)
+                 | wordOffset;
+
+  return (virtual_addr & 0xFFFFFFFF00000000ULL) | paddr;
+}
+
+std::vector<uint64_t> CoalescingUnit::build_translated_lane_addrs(
+    Warp *warp, const std::vector<uint64_t> &addrs,
+    const std::vector<size_t> &active_threads) {
+  // Build a NUM_LANES-sized vector indexed by lane_id with translated physical addresses.
+  // Inactive lanes get SIM_SHARED_SRAM_BASE (in the SRAM region, filtered by calculate_bursts).
+  // This ensures that the vector index == lane_id, which is required for correct
+  // SameBlock matching (addr[6:2] must equal lane_id).
+  std::vector<uint64_t> lane_addrs(NUM_LANES, SIM_SHARED_SRAM_BASE);
+  for (size_t i = 0; i < addrs.size(); i++) {
+    size_t lane_id = active_threads[i];
+    lane_addrs[lane_id] = interleave_addr_simtight(addrs[i], warp, lane_id);
+  }
+  return lane_addrs;
 }
 
 void CoalescingUnit::suspend_warp(Warp *warp,
@@ -466,8 +509,23 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   pending_request_queue.push(req);
   
   warp->suspended = true;
-  int dram_bursts = calculate_bursts(addrs, bytes, false);
-  int dram_access_count = dram_bursts;
+
+  // Latency: use original addresses for simulation correctness
+  int sim_bursts = calculate_bursts(addrs, bytes, false);
+  int latency;
+  if (sim_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;
+  } else if (sim_bursts == 1) {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  } else {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + (sim_bursts - 1);
+  }
+  blocked_warps[warp] = latency;
+
+  // Count DRAM accesses on interleaved physical addresses (matching SIMTight's
+  // hardware coalescing which operates on interleaved physical addresses)
+  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
+  int dram_access_count = calculate_bursts(phys_addrs, bytes, false);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -475,17 +533,6 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }
   }
-  
-  // Add warp to blocked_warps immediately with full latency
-  int latency;
-  if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;
-  } else if (dram_bursts == 1) {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
-  } else {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + (dram_bursts - 1);
-  }
-  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
@@ -523,8 +570,21 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   pending_request_queue.push(req);
   
   warp->suspended = true;
-  int dram_bursts = calculate_bursts(addrs, bytes, true);
-  int dram_access_count = calculate_request_count(addrs, bytes);
+
+  // Latency: use original addresses for simulation correctness
+  int sim_bursts = calculate_bursts(addrs, bytes, true);
+  int latency;
+  if (sim_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;
+  } else {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  }
+  blocked_warps[warp] = latency;
+
+  // Count DRAM accesses on interleaved physical addresses
+  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
+  // For stores, count 1 per coalesced request (matching SIMTight's dramStoreSig = 1)
+  int dram_access_count = calculate_request_count(phys_addrs, bytes);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -532,16 +592,6 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }
   }
-  
-  // Add warp to blocked_warps immediately with full latency
-  int latency;
-  if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;
-  } else {
-    // For stores, latency is pipeline + DRAM latency
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
-  }
-  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::fence(Warp *warp) {
@@ -598,8 +648,21 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   pending_request_queue.push(req);
   
   warp->suspended = true;
-  int dram_bursts = calculate_bursts(addrs, bytes, true);
-  int dram_access_count = calculate_request_count(addrs, bytes);
+
+  // Latency: use original addresses for simulation correctness
+  int sim_bursts = calculate_bursts(addrs, bytes, true);
+  int latency;
+  if (sim_bursts == 0) {
+    latency = COALESCING_PIPELINE_DEPTH + 1;
+  } else {
+    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+  }
+  blocked_warps[warp] = latency;
+
+  // Count DRAM accesses on interleaved physical addresses
+  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
+  // For atomics (like stores), count 1 per coalesced request (matching SIMTight's dramStoreSig = 1)
+  int dram_access_count = calculate_request_count(phys_addrs, bytes);
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -607,15 +670,6 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
       GPUStatisticsManager::instance().increment_gpu_dram_accs();
     }
   }
-  
-  // Add warp to blocked_warps immediately with full latency
-  int latency;
-  if (dram_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;
-  } else {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
-  }
-  blocked_warps[warp] = latency;
 }
 
 bool CoalescingUnit::is_busy() { 

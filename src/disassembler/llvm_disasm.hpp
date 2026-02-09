@@ -1,6 +1,5 @@
 #pragma once
 #include "../utils.hpp"
-#include "../custom_instrs.hpp"
 
 // Based on the work of michaeljclark, five ways to invoke the LLVM disassembler
 // https://gist.github.com/michaeljclark/d94b72fa3d580ea2037e0a4dc5e2fc5b#file-llvmdiscpp-cpp-L15
@@ -10,9 +9,7 @@ using namespace llvm;
 class LLVMDisassembler {
 public:
   LLVMDisassembler(std::string target_id, std::string cpu,
-                   std::string features,
-                   const std::vector<CustomInstrEntry> *custom_instrs = nullptr)
-      : custom_instrs_(custom_instrs) {
+                   std::string features) {
     target = TargetRegistry::lookupTarget(Triple(target_id), err);
     if (!target) {
       std::cout << "Couldn't find " + target_id << std::endl;
@@ -76,15 +73,20 @@ public:
       std::cout << "[WARNING] Instruction has no size?" << std::endl;
     }
 
-    if (custom_instrs_) {
-      const uint8_t *raw = data.data() + offset;
-      // Use at least 4 bytes when available so mask+value (32-bit) matching works even if LLVM returned size<4
-      size_t match_len = (offset + 4 <= data.size()) ? 4 : (size > 0 ? static_cast<size_t>(size) : 0);
-      if (match_len > 0) {
-        unsigned int custom_opcode = 0;
-        if (match_custom_instruction(*custom_instrs_, raw, match_len, &custom_opcode)) {
-          in.setOpcode(custom_opcode);
+    if (getOpcodeName(in.getOpcode()) == "PHI") {
+      // Check if we are in a noclPush/Pop case
+      std::string buf_substr = buf.substr(0, 14);
+      if (buf_substr == "00000000:09 00" || buf_substr == "00000000:09 10") {
+        std::string type = buf.substr(12, 1);
+        if (type == "0") {
+          in.setOpcode(0xFF);
+        } else {
+          in.setOpcode(0xFE);
         }
+      } else if (buf_substr == "00000000:08 00") {
+        in.setOpcode(0xFD);
+        // TODO: Implement cache line flush
+        // The GPU has no cache so probably unnecessary to model
       }
     }
     return in;
@@ -98,9 +100,12 @@ public:
   }
 
   std::string getOpcodeName(unsigned int opcode) {
-    if (custom_instrs_) {
-      auto name = custom_opcode_to_name(*custom_instrs_, opcode);
-      if (name.has_value()) return *name;
+    if (opcode == 0xFF) {
+      return "NOCLPUSH";
+    } else if (opcode == 0xFE) {
+      return "NOCLPOP";
+    } else if (opcode == 0xFD) {
+      return "CACHE_LINE_FLUSH";
     }
     return ii->getName(opcode).str();
   }
@@ -108,7 +113,6 @@ public:
 private:
   static const int hexcols = 10;
 
-  const std::vector<CustomInstrEntry> *custom_instrs_ = nullptr;
   const Target *target;
   std::string err;
   MCTargetOptions options;

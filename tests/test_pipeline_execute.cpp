@@ -1,6 +1,5 @@
 #include "test_pipeline_execute.hpp"
 #include "config.hpp"
-#include "custom_instrs.hpp"
 #include "disassembler/llvm_disasm.hpp"
 #include "gpu/pipeline_execute.hpp"
 #include "gpu/register_file.hpp"
@@ -102,22 +101,8 @@ void test_execution_unit() {
   CoalescingUnit cu(&dm);
   RegisterFile rf(32, 32);
 
-  // Load custom instructions so NOCLPUSH/NOCLPOP/CACHE_LINE_FLUSH are recognized.
-  // Try file first; if missing (e.g. cwd), use spec mask+value entries so test is self-contained.
-  std::vector<CustomInstrEntry> custom_instrs = load_custom_instrs("custom_instrs.txt");
-  if (custom_instrs.empty())
-    custom_instrs = load_custom_instrs("../custom_instrs.txt");
-  if (custom_instrs.empty()) {
-    custom_instrs = {
-        {"NOCLPUSH", 0xFF, {}, 0x707F, 0x0009, "noclpush"},
-        {"NOCLPOP", 0xFE, {}, 0x707F, 0x1009, "noclpop"},
-        {"CACHE_LINE_FLUSH", 0xFD, {}, 0x707F, 0x0008, "cache_line_flush"},
-    };
-  }
-  const std::vector<CustomInstrEntry> *custom_ptr = &custom_instrs;
-
-  LLVMDisassembler disasm("riscv32", "generic-rv32", "+m", custom_ptr);
-  ExecutionUnit eu(&cu, &rf, &disasm, nullptr, custom_ptr);
+  LLVMDisassembler disasm("riscv32", "generic-rv32", "+m");
+  ExecutionUnit eu(&cu, &rf, &disasm, nullptr);
 
   // Helper to run an instruction
   auto run_inst = [&](Warp *warp, uint32_t opcode_bytes,

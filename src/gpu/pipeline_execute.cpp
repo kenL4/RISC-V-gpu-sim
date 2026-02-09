@@ -12,36 +12,8 @@
 
 ExecutionUnit::ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf,
                              LLVMDisassembler *disasm,
-                             HostGPUControl *gpu_controller,
-                             const std::vector<CustomInstrEntry> *custom_instrs)
-    : cu(cu), rf(rf), disasm(disasm), gpu_controller(gpu_controller),
-      custom_instrs_(custom_instrs) {
-  register_custom_handlers();
-}
-
-void ExecutionUnit::register_custom_handlers() {
-  custom_handlers_["noclpush"] = [this](Warp *warp, std::vector<size_t> active_threads, MCInst *in) {
-    return noclpush(warp, active_threads, in);
-  };
-  custom_handlers_["noclpop"] = [this](Warp *warp, std::vector<size_t> active_threads, MCInst *in) {
-    return noclpop(warp, active_threads, in);
-  };
-  custom_handlers_["cache_line_flush"] = [this](Warp *warp, std::vector<size_t> active_threads, MCInst *in) {
-    return cache_line_flush(warp, active_threads, in);
-  };
-  custom_handlers_["noop"] = [this](Warp *warp, std::vector<size_t> active_threads, MCInst *in) {
-    return custom_noop(warp, active_threads, in);
-  };
-}
-
-bool ExecutionUnit::custom_noop(Warp *warp, std::vector<size_t> active_threads,
-                               MCInst *in) {
-  (void)in;
-  for (auto thread : active_threads) {
-    warp->pc[thread] += 4;
-  }
-  return true;
-}
+                             HostGPUControl *gpu_controller)
+    : cu(cu), rf(rf), disasm(disasm), gpu_controller(gpu_controller) {}
 
 execute_result ExecutionUnit::execute(Warp *warp,
                                       std::vector<size_t> active_threads,
@@ -49,20 +21,6 @@ execute_result ExecutionUnit::execute(Warp *warp,
   execute_result res{true, false, true};
 
   std::string mnemonic = disasm->getOpcodeName(inst.getOpcode());
-
-  if (custom_instrs_) {
-    auto handler_type = custom_name_to_handler_type(*custom_instrs_, mnemonic);
-    if (handler_type.has_value()) {
-      auto it = custom_handlers_.find(*handler_type);
-      if (it != custom_handlers_.end()) {
-        res.write_required = it->second(warp, active_threads, &inst);
-      } else {
-        res.write_required = custom_noop(warp, active_threads, &inst);
-      }
-      return res;
-    }
-  }
-
   if (mnemonic == "ADDI") {
     res.write_required = addi(warp, active_threads, &inst);
   } else if (mnemonic == "ADD") {
@@ -201,6 +159,12 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = ebreak(warp, active_threads, &inst);
   } else if (mnemonic == "CSRRW") {
     res.write_required = csrrw(warp, active_threads, &inst);
+  } else if (mnemonic == "NOCLPUSH") {
+    res.write_required = noclpush(warp, active_threads, &inst);
+  } else if (mnemonic == "NOCLPOP") {
+    res.write_required = noclpop(warp, active_threads, &inst);
+  } else if (mnemonic == "CACHE_LINE_FLUSH") {
+    res.write_required = cache_line_flush(warp, active_threads, &inst);
   } else {
     // Default to skip instruction
     for (auto thread : active_threads) {
@@ -1451,10 +1415,9 @@ bool ExecutionUnit::cache_line_flush(Warp *warp,
 
 ExecuteSuspend::ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf,
                                uint64_t max_addr, LLVMDisassembler *disasm,
-                               HostGPUControl *gpu_controller,
-                               const std::vector<CustomInstrEntry> *custom_instrs)
+                               HostGPUControl *gpu_controller)
     : max_addr(max_addr), cu(cu), disasm(disasm) {
-  eu = new ExecutionUnit(cu, rf, disasm, gpu_controller, custom_instrs);
+  eu = new ExecutionUnit(cu, rf, disasm, gpu_controller);
   log("Execute/Suspend", "Initializing execute/suspend pipeline stage");
 }
 

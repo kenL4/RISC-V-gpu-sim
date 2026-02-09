@@ -54,8 +54,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_link_libraries(${PROJECT_NAME} PRIVATE gpu_sim_lib)
 
 # --- Unit Tests ---
-# Copy custom_instrs.txt to build dir so unit tests can find it when run from build/
-configure_file(${CMAKE_SOURCE_DIR}/custom_instrs.txt ${CMAKE_BINARY_DIR}/custom_instrs.txt COPYONLY)
 enable_testing()
 add_executable(unit_tests
     tests/unit_tests.cpp

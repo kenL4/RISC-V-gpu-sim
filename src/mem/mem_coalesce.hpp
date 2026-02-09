@@ -72,8 +72,17 @@ private:
                                                       size_t access_size);
   
   // Translate virtual stack address to physical per-thread stack address
-  // All threads see the same virtual stack addresses, but hardware translates
-  // them to separate physical stacks per thread
+  // Uses contiguous per-thread layout for actual data operations
   uint64_t translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id);
+
+  // SIMTight-matching interleaved address for coalescing/DRAM counting only
+  uint64_t interleave_addr_simtight(uint64_t virtual_addr, Warp *warp, size_t thread_id);
+
+  // Build a NUM_LANES-sized vector of translated physical addresses indexed by lane_id.
+  // Inactive lanes get an SRAM sentinel address (filtered out by calculate_bursts).
+  std::vector<uint64_t> build_translated_lane_addrs(
+      Warp *warp, const std::vector<uint64_t> &addrs,
+      const std::vector<size_t> &active_threads);
+
   void process_mem_request(const MemRequest &req);
 };
