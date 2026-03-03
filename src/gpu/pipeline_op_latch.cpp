@@ -6,7 +6,8 @@ OperandLatch::OperandLatch() {
 
 void OperandLatch::execute() {
     if (!PipelineStage::input_latch->updated) return;
-    
+    if (PipelineStage::output_latch->updated) return;
+
     Warp *warp = PipelineStage::input_latch->warp;
     
     // Latch operands (with register file load latency accounted for)
@@ -24,5 +25,5 @@ void OperandLatch::execute() {
 }
 
 bool OperandLatch::is_active() {
-    return PipelineStage::input_latch->updated;
+    return PipelineStage::input_latch->updated || PipelineStage::output_latch->updated;
 }

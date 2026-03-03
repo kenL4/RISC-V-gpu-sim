@@ -104,6 +104,8 @@ private:
 class ExecuteSuspend : public PipelineStage {
 public:
   std::function<void(Warp *warp)> insert_warp;
+  std::function<void(Warp *warp)> insert_warp_retry;
+  std::function<void()> notify_warp_terminated;
   ExecuteSuspend(CoalescingUnit *cu, RegisterFile *rf, uint64_t max_addr,
                  LLVMDisassembler *disasm, HostGPUControl *gpu_controller);
   void execute() override;

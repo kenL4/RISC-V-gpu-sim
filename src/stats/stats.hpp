@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 
 class GPUStatisticsManager {
 public:
@@ -39,6 +40,8 @@ public:
   void set_gpu_pipeline_active(bool active);
   bool is_gpu_pipeline_active();
 
+  void tick_instr_pipeline();
+
 private:
   uint64_t gpu_cycles = 0;
   uint64_t gpu_instrs = 0;
@@ -49,6 +52,11 @@ private:
   uint64_t cpu_dram_accs = 0;
   uint64_t gpu_active_cpu_dram_accs = 0;
   bool gpu_pipeline_active_flag = false;
+
+  static constexpr size_t INSTR_TREE_DEPTH = 6;
+  std::array<uint64_t, INSTR_TREE_DEPTH> instr_delay_pipe = {};
+  size_t instr_pipe_head = 0;
+  uint64_t instr_pending_this_cycle = 0;
 
   GPUStatisticsManager() = default;
 };

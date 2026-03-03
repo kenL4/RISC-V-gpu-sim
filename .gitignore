@@ -14,5 +14,6 @@ cmake_install.cmake
 **/__pycache__/
 **/venv/
 
-# Debug traces
-# trace*.log
+# Debug traces and output files
+*.log
+output.bmp

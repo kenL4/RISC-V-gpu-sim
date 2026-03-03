@@ -2,7 +2,6 @@
 #include "config.hpp"
 #include "mem/mem_coalesce.hpp"
 #include <map>
-#include <climits>
 
 WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
                              CoalescingUnit *cu, bool start_active)
@@ -21,7 +20,6 @@ WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
 }
 
 void WarpScheduler::flush_new_warps() {
-  // Warps that completed last cycle are in reinsert_ready; merge them first (1-cycle delay, matching SIMTight).
   while (!reinsert_ready.empty()) {
     new_warp_queue.push(reinsert_ready.front());
     reinsert_ready.pop();
@@ -49,12 +47,11 @@ std::pair<uint64_t, uint64_t> WarpScheduler::fair_scheduler(uint64_t hist, uint6
   }
 }
 
-
 void WarpScheduler::execute() {
   warp_issued_this_cycle = false;
 
   // 2nd substage: Output the chosen warp from buffer (matching SIMTight's 2nd substage)
-  if (chosen_warp_buffer != nullptr) {
+  if (chosen_warp_buffer != nullptr && !PipelineStage::output_latch->updated) {
     // Output the warp that was chosen in the previous cycle
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = chosen_warp_buffer;
@@ -65,15 +62,22 @@ void WarpScheduler::execute() {
           name + " scheduled to run (substage 2)");
     }
     chosen_warp_buffer = nullptr;
-  } else {
+  } else if (chosen_warp_buffer == nullptr && !PipelineStage::output_latch->updated) {
     PipelineStage::output_latch->updated = false;
     PipelineStage::output_latch->warp = nullptr;
   }
 
   // 1st substage: Choose a warp for next cycle (matching SIMTight's 1st substage)
-  // Swap delay queue with ready: warps that completed last cycle (now in reinsert_ready) become available this cycle.
-  reinsert_ready.swap(reinsert_delay_queue);
   flush_new_warps();
+
+  while (!retry_extra_ready.empty()) {
+    reinsert_delay_queue.push(retry_extra_ready.front());
+    retry_extra_ready.pop();
+  }
+
+  reinsert_ready.swap(reinsert_delay_queue);
+
+  retry_extra_ready.swap(retry_extra_delay_queue);
 
   barrier_bits = 0;
   for (const auto& [warp_id, warp] : all_warps) {
@@ -107,51 +111,63 @@ void WarpScheduler::execute() {
   
   warp_queue = std::move(temp_queue);
 
-  // Apply fair scheduler
-  uint64_t chosen_bitmask = 0;
-  if (avail != 0) {
-    std::pair<uint64_t, uint64_t> result = fair_scheduler(sched_history, avail);
-    sched_history = result.first;
-    chosen_bitmask = result.second;
-  }
-
-  // Find and remove warp with matching warp_id from chosen bitmask
-  Warp *chosen_warp = nullptr;
-  if (chosen_bitmask != 0) {
-    uint64_t chosen_warp_id = __builtin_ctzll(chosen_bitmask);
-    
-    // Find and remove the chosen warp from queue
-    std::queue<Warp *> new_queue;
-    while (!warp_queue.empty()) {
-      Warp *w = warp_queue.front();
-      warp_queue.pop();
-      
-      if (w->warp_id == chosen_warp_id && !w->suspended && chosen_warp == nullptr) {
-        chosen_warp = w;
-      } else {
-        new_queue.push(w);
-      }
+  if (chosen_warp_buffer == nullptr) {
+    uint64_t chosen_bitmask = 0;
+    if (avail != 0) {
+      std::pair<uint64_t, uint64_t> result = fair_scheduler(sched_history, avail);
+      sched_history = result.first;
+      chosen_bitmask = result.second;
     }
-    warp_queue = std::move(new_queue);
-  }
 
-  // Store chosen warp in buffer for next cycle (2nd substage)
-  if (chosen_warp != nullptr) {
-    chosen_warp_buffer = chosen_warp;
-    log("Warp Scheduler",
-        "Warp " + std::to_string(chosen_warp->warp_id) + " chosen (substage 1, fair scheduler)");
+    Warp *chosen_warp = nullptr;
+    if (chosen_bitmask != 0) {
+      uint64_t chosen_warp_id = __builtin_ctzll(chosen_bitmask);
+
+      std::queue<Warp *> new_queue;
+      while (!warp_queue.empty()) {
+        Warp *w = warp_queue.front();
+        warp_queue.pop();
+
+        if (w->warp_id == chosen_warp_id && !w->suspended && chosen_warp == nullptr) {
+          chosen_warp = w;
+        } else {
+          new_queue.push(w);
+        }
+      }
+      warp_queue = std::move(new_queue);
+    }
+
+    if (chosen_warp != nullptr) {
+      chosen_warp_buffer = chosen_warp;
+      log("Warp Scheduler",
+          "Warp " + std::to_string(chosen_warp->warp_id) + " chosen (substage 1, fair scheduler)");
+    }
   }
 }
 
 bool WarpScheduler::is_active() {
   return warp_queue.size() > 0 || new_warp_queue.size() > 0 ||
          reinsert_delay_queue.size() > 0 || reinsert_ready.size() > 0 ||
+         retry_extra_delay_queue.size() > 0 || retry_extra_ready.size() > 0 ||
          chosen_warp_buffer != nullptr;
 }
 
 void WarpScheduler::insert_warp(Warp *warp) {
-  // Delay re-insertion by 1 cycle so warp becomes available next cycle (match SIMTight pipeline latency).
   reinsert_delay_queue.push(warp);
+  if (warp->warp_id < 64) {
+    all_warps[warp->warp_id] = warp;
+  }
+}
+
+void WarpScheduler::insert_warp_retry(Warp *warp) {
+  retry_extra_delay_queue.push(warp);
+  if (warp->warp_id < 64) {
+    all_warps[warp->warp_id] = warp;
+  }
+}
+
+void WarpScheduler::insert_warp_immediate(Warp *warp) {
+  warp_queue.push(warp);
   if (warp->warp_id < 64) {
     all_warps[warp->warp_id] = warp;
   }
@@ -268,6 +284,8 @@ WarpScheduler::~WarpScheduler() {
   }
   while (reinsert_delay_queue.size() > 0) reinsert_delay_queue.pop();
   while (reinsert_ready.size() > 0) reinsert_ready.pop();
+  while (retry_extra_delay_queue.size() > 0) retry_extra_delay_queue.pop();
+  while (retry_extra_ready.size() > 0) retry_extra_ready.pop();
 
   log("Warp Scheduler", "Destroyed pipeline stage");
 }

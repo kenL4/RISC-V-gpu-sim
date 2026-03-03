@@ -11,6 +11,9 @@ enum EventType {
     MEM_REQ_ISSUE,
     DRAM_REQ_ISSUE,
     INSTR_EXEC,
+    WARP_RETRY,
+    WARP_SUSPEND,
+    WARP_RESUME,
 };
 
 struct TraceEvent {

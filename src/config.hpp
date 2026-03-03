@@ -6,8 +6,8 @@
 constexpr size_t DRAM_BEAT_BYTES = 64;
 constexpr size_t DRAM_BEAT_LOG_BYTES = 6;
 constexpr size_t SIM_DRAM_LATENCY = 30;
+constexpr size_t SIM_DRAM_RESP_OVERHEAD = 8;
 
-// TODO: Bring back MUL/DIV latency
 constexpr size_t SIM_MUL_LATENCY = 3;
 constexpr size_t SIM_DIV_LATENCY = 32;
 constexpr size_t SIM_REM_LATENCY = 32;

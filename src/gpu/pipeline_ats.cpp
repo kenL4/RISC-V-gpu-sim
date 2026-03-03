@@ -15,6 +15,7 @@ bool ActiveThreadSelection::is_active() {
 void ActiveThreadSelection::execute() {
   // 2nd substage: Output buffered results (matching SIMTight's 2nd substage)
   if (stage_buffer.valid) {
+    if (PipelineStage::output_latch->updated) return;
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = stage_buffer.warp;
     PipelineStage::output_latch->active_threads = stage_buffer.active_threads;
@@ -23,7 +24,7 @@ void ActiveThreadSelection::execute() {
         name + " has " +
             std::to_string(stage_buffer.active_threads.size()) + " active threads (substage 2)");
     stage_buffer.valid = false;  // Clear buffer
-  } else {
+  } else if (!PipelineStage::output_latch->updated) {
     PipelineStage::output_latch->updated = false;
     PipelineStage::output_latch->warp = nullptr;
   }

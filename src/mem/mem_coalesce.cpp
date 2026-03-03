@@ -18,6 +18,9 @@ CoalescingUnit::CoalescingUnit(DataMemory *scratchpad_mem, const std::string *tr
   }
 }
 
+CoalescingUnit::~CoalescingUnit() {
+}
+
 bool CoalescingUnit::can_put() {
   return pending_request_queue.size() < MEM_REQ_QUEUE_CAPACITY;
 }
@@ -357,6 +360,41 @@ std::vector<uint64_t> CoalescingUnit::compute_coalesced_addresses(const std::vec
   return coalesced_addrs;
 }
 
+bool CoalescingUnit::is_sram_access(const MemRequest &req) const {
+  if (req.is_fence || req.addrs.empty()) return false;
+  for (const auto &addr : req.addrs) {
+    uint64_t addr_32 = addr & 0xFFFFFFFF;
+    if (!(SIM_SHARED_SRAM_BASE <= addr_32 && addr_32 < SIM_SIMT_STACK_BASE)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int CoalescingUnit::calculate_sram_bank_conflicts(const MemRequest &req) const {
+  if (!req.is_store && !req.is_atomic && req.addrs.size() > 1) {
+    bool all_same = true;
+    for (size_t i = 1; i < req.addrs.size(); i++) {
+      if (req.addrs[i] != req.addrs[0]) {
+        all_same = false;
+        break;
+      }
+    }
+    if (all_same) return 2;
+  }
+
+  int bank_count[SRAM_BANKS] = {};
+  for (const auto &addr : req.addrs) {
+    int bank = (addr >> 2) & (SRAM_BANKS - 1);
+    bank_count[bank]++;
+  }
+  int max_per_bank = 0;
+  for (size_t i = 0; i < SRAM_BANKS; i++) {
+    max_per_bank = std::max(max_per_bank, bank_count[i]);
+  }
+  return std::max(max_per_bank, 2);
+}
+
 /*
  * Stack address translation for data operations (stores/loads in scratchpad_mem).
  * Uses a simple per-thread layout that ensures each thread has unique physical addresses.
@@ -503,25 +541,36 @@ void CoalescingUnit::load(Warp *warp, const std::vector<uint64_t> &addrs,
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
-  
+
   warp->suspended = true;
 
-  // Latency: use original addresses for simulation correctness
-  int sim_bursts = calculate_bursts(addrs, bytes, false);
+  if (instr_tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.pc = warp->pc[0];
+    event.warp_id = warp->warp_id;
+    event.lane_id = -1;
+    event.event_type = WARP_SUSPEND;
+    instr_tracer->trace_event(event);
+  }
+
+  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
+  int sim_bursts = calculate_bursts(phys_addrs, bytes, false);
+  int sim_groups = calculate_request_count(phys_addrs, bytes);
+
   int latency;
   if (sim_bursts == 0) {
     latency = COALESCING_PIPELINE_DEPTH + 1;
-  } else if (sim_bursts == 1) {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
   } else {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + (sim_bursts - 1);
+    int feedback_cycles = (sim_groups > 1) ? 3 * (sim_groups - 1) : 0;
+    int bursts_extra = (sim_bursts > sim_groups) ? sim_bursts - sim_groups : 0;
+    latency = feedback_cycles + COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY
+            + SIM_DRAM_RESP_OVERHEAD
+            + bursts_extra;
   }
   blocked_warps[warp] = latency;
 
-  // Count DRAM accesses on interleaved physical addresses (matching SIMTight's
-  // hardware coalescing which operates on interleaved physical addresses)
-  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
-  int dram_access_count = calculate_bursts(phys_addrs, bytes, false);
+  int dram_access_count = sim_bursts;
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -567,18 +616,6 @@ void CoalescingUnit::store(Warp *warp, const std::vector<uint64_t> &addrs,
   req.store_values = vals;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
-  
-  warp->suspended = true;
-
-  // Latency: use original addresses for simulation correctness
-  int sim_bursts = calculate_bursts(addrs, bytes, true);
-  int latency;
-  if (sim_bursts == 0) {
-    latency = COALESCING_PIPELINE_DEPTH + 1;
-  } else {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
-  }
-  blocked_warps[warp] = latency;
 
   // Count DRAM accesses on interleaved physical addresses
   // SIMTight's coalescing unit issues burstLen separate DRAM requests for stores
@@ -609,10 +646,25 @@ void CoalescingUnit::fence(Warp *warp) {
   req.is_fence = true;
   req.active_threads = {};
   pending_request_queue.push(req);
-  
+
   warp->suspended = true;
-  // A bit of a hack
-  blocked_warps[warp] = MEM_REQ_QUEUE_CAPACITY;
+
+  if (!warp->is_cpu) {
+    GPUStatisticsManager::instance().increment_gpu_dram_accs();
+  }
+
+  if (instr_tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.pc = warp->pc[0];
+    event.warp_id = warp->warp_id;
+    event.lane_id = -1;
+    event.event_type = WARP_SUSPEND;
+    instr_tracer->trace_event(event);
+  }
+
+  int latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + SIM_DRAM_RESP_OVERHEAD;
+  blocked_warps[warp] = latency;
 }
 
 void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
@@ -650,24 +702,37 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   req.rd_reg = rd_reg;
   req.active_threads = active_threads;
   pending_request_queue.push(req);
-  
+
   warp->suspended = true;
 
-  // Latency: use original addresses for simulation correctness
-  int sim_bursts = calculate_bursts(addrs, bytes, true);
+  if (instr_tracer && !warp->is_cpu) {
+    TraceEvent event;
+    event.cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+    event.pc = warp->pc[0];
+    event.warp_id = warp->warp_id;
+    event.lane_id = -1;
+    event.event_type = WARP_SUSPEND;
+    instr_tracer->trace_event(event);
+  }
+
+  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
+  int sim_bursts = calculate_bursts(phys_addrs, bytes, true);
+  int sim_groups = calculate_request_count(phys_addrs, bytes);
+
   int latency;
   if (sim_bursts == 0) {
     latency = COALESCING_PIPELINE_DEPTH + 1;
   } else {
-    latency = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY;
+    int feedback_cycles = (sim_groups > 1) ? 4 * (sim_groups - 1) : 0;
+    latency = feedback_cycles + COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY
+            + SIM_DRAM_RESP_OVERHEAD;
   }
   blocked_warps[warp] = latency;
 
   // Count DRAM accesses on interleaved physical addresses
   // Atomics use store path in SIMTight, which issues burstLen DRAM requests per
   // coalesced group (same reasoning as stores above).
-  std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(warp, addrs, active_threads);
-  int dram_access_count = calculate_bursts(phys_addrs, bytes, true);
+  int dram_access_count = sim_bursts;
   for (int i = 0; i < dram_access_count; i++) {
     if (warp->is_cpu) {
       GPUStatisticsManager::instance().increment_cpu_dram_accs();
@@ -680,8 +745,24 @@ void CoalescingUnit::atomic_add(Warp *warp, const std::vector<uint64_t> &addrs,
   }
 }
 
-bool CoalescingUnit::is_busy() { 
-  return !pending_request_queue.empty() || !blocked_warps.empty();
+bool CoalescingUnit::is_busy() {
+  return !pending_request_queue.empty() || !blocked_warps.empty()
+      || coalescing_remaining > 0 || coalescing_waiting;
+}
+
+void CoalescingUnit::reset_dram_state() {
+  coalescing_remaining = 0;
+  coalescing_waiting = false;
+  go5_busy_remaining = 0;
+  inflight_count_reg = 0;
+  for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++)
+    pipeline_stages[s] = std::nullopt;
+  dram_queue_depth = 0;
+  dram_inflight = 0;
+  while (!dram_response_schedule.empty()) dram_response_schedule.pop();
+  while (!sram_queue.empty()) sram_queue.pop();
+  sram_processing_remaining = 0;
+  next_dram_resp_available = 0;
 }
 
 bool CoalescingUnit::is_busy_for_pipeline(bool is_cpu_pipeline) {
@@ -698,24 +779,43 @@ Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
 
   for (auto &[key, val] : blocked_warps) {
     if (val == 0 && key->is_cpu == is_cpu_pipeline) {
+      bool still_in_queues = false;
+      {
+        std::queue<MemRequest> tmp = pending_request_queue;
+        while (!tmp.empty()) {
+          if (tmp.front().warp == key) { still_in_queues = true; break; }
+          tmp.pop();
+        }
+      }
+      if (!still_in_queues) {
+        for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++) {
+          if (pipeline_stages[s] && pipeline_stages[s]->req.warp == key) {
+            still_in_queues = true; break;
+          }
+        }
+      }
+      if (still_in_queues) {
+        blocked_warps[key] = 1;
+        continue;
+      }
+
       // Check if this is a fence that's trying to complete
       // If so, verify that all pending operations from this warp have completed
       bool is_fence_completing = false;
-      
+
       // Check if there's a fence request for this warp in the pipeline
-      std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
-      while (!temp_pipeline.empty()) {
-        if (temp_pipeline.front().req.warp == key && temp_pipeline.front().req.is_fence) {
+      for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++) {
+        if (pipeline_stages[s] && pipeline_stages[s]->req.warp == key &&
+            pipeline_stages[s]->req.is_fence) {
           is_fence_completing = true;
           break;
         }
-        temp_pipeline.pop();
       }
-      
+
       // If this is a fence, check for pending operations from the same warp
       if (is_fence_completing) {
         bool has_pending = false;
-        
+
         // Check pending queue
         std::queue<MemRequest> temp_queue = pending_request_queue;
         while (!temp_queue.empty()) {
@@ -725,27 +825,24 @@ Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
           }
           temp_queue.pop();
         }
-        
-        // Check pipeline queue
+
         if (!has_pending) {
-          std::queue<PipelineRequest> temp_pipeline2 = pipeline_queue;
-          while (!temp_pipeline2.empty()) {
-            if (temp_pipeline2.front().req.warp == key && 
-                !temp_pipeline2.front().req.is_fence) {
+          for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++) {
+            if (pipeline_stages[s] && pipeline_stages[s]->req.warp == key &&
+                !pipeline_stages[s]->req.is_fence) {
               has_pending = true;
               break;
             }
-            temp_pipeline2.pop();
           }
         }
-        
+
         // If there are pending operations, don't resume the fence yet
         if (has_pending) {
           blocked_warps[key] = 1;  // Add one more cycle of delay
           continue;
         }
       }
-      
+
       resumable_warp = key;
       break;
     }
@@ -753,6 +850,12 @@ Warp *CoalescingUnit::get_resumable_warp_for_pipeline(bool is_cpu_pipeline) {
 
   if (resumable_warp == nullptr)
     return nullptr;
+
+  if (resumable_warp == divider_warp) {
+    divider_warp = nullptr;
+  }
+
+  mul_pipeline_warps.erase(resumable_warp);
 
   blocked_warps.erase(resumable_warp);
   return resumable_warp;
@@ -763,46 +866,182 @@ void CoalescingUnit::suspend_warp_latency(Warp *warp, size_t latency) {
   blocked_warps[warp] = latency;
 }
 
+void CoalescingUnit::suspend_for_func_unit(Warp *warp, size_t latency,
+                                           unsigned int rd_reg,
+                                           const std::map<size_t, int> &results) {
+  warp->suspended = true;
+  blocked_warps[warp] = latency;
+  load_results_map[warp] = {rd_reg, results};
+
+  if (instr_tracer) {
+    TraceEvent event;
+    event.cycle = tick_counter;
+    event.warp_id = warp->warp_id;
+    event.event_type = WARP_SUSPEND;
+    instr_tracer->trace_event(event);
+  }
+}
+
 void CoalescingUnit::tick() {
-  // Pipeline model: Move requests through pipeline stages
-  // 1. Advance requests in pipeline_queue (increment cycles_in_pipeline)
-  // 2. Process requests that have completed pipeline (cycles_in_pipeline >= DEPTH)
-  // 3. Move requests from pending_queue to pipeline_queue (if pipeline has space)
-  
-  // Step 1 & 2: Advance pipeline and process completed requests
-  bool requests_processed_this_cycle = false;
-  size_t pipeline_size = pipeline_queue.size();
-  for (size_t i = 0; i < pipeline_size; i++) {
-    PipelineRequest pipe_req = pipeline_queue.front();
-    pipeline_queue.pop();
-    
-    pipe_req.cycles_in_pipeline++;
-    
-    if (pipe_req.cycles_in_pipeline >= COALESCING_PIPELINE_DEPTH) {
-      // Request has completed pipeline, process it
-      process_mem_request(pipe_req.req);
-      requests_processed_this_cycle = true;
-    } else {
-      // Request still in pipeline, put it back
-      pipeline_queue.push(pipe_req);
+
+  tick_counter++;
+
+  size_t old_dram_inflight = dram_inflight;
+
+  while (!dram_response_schedule.empty() &&
+         dram_response_schedule.front().first <= tick_counter) {
+    dram_inflight -= dram_response_schedule.front().second;
+    dram_response_schedule.pop();
+  }
+
+  if (sram_processing_remaining > 0) {
+    sram_processing_remaining--;
+    if (sram_processing_remaining == 0 && !sram_queue.empty()) {
+      sram_processing_remaining = sram_queue.front();
+      sram_queue.pop();
     }
   }
-  
-  // Step 3: Move requests from pending to pipeline
-  bool go1_active = !pipeline_queue.empty();
-  bool stalled = false;
-  bool can_consume = (!stalled || !go1_active);
-  
-  if (can_consume && !pending_request_queue.empty() && 
-      pipeline_queue.size() < COALESCING_PIPELINE_DEPTH &&
-      (pipeline_queue.size() + pending_request_queue.size()) < MEM_REQ_QUEUE_CAPACITY) {
-    PipelineRequest pipe_req;
-    pipe_req.req = pending_request_queue.front();
-    pipe_req.cycles_in_pipeline = 0;
-    pending_request_queue.pop();
-    pipeline_queue.push(pipe_req);
+
+  int go5_current = go5_busy_remaining;
+
+  if (go5_busy_remaining > 0) {
+    go5_busy_remaining--;
   }
-  
+
+  bool stalling = false;
+  constexpr size_t EXIT_STAGE = COALESCING_PIPELINE_DEPTH - 1;
+
+  if (pipeline_stages[EXIT_STAGE]) {
+    bool is_sram = is_sram_access(pipeline_stages[EXIT_STAGE]->req);
+    if (is_sram) {
+      if (sram_queue.size() >= SRAM_QUEUE_CAPACITY) {
+        stalling = true;
+      }
+    } else {
+      if (go5_current > 0 || old_dram_inflight >= DRAM_MAX_INFLIGHT) {
+        stalling = true;
+      }
+    }
+  }
+
+  if (!stalling && coalescing_remaining > 0) {
+    coalescing_remaining--;
+    if (coalescing_remaining == 0 && !pending_request_queue.empty()) {
+      coalescing_waiting = true;
+    }
+  }
+
+  bool old_occupied[COALESCING_PIPELINE_DEPTH];
+  for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++) {
+    old_occupied[s] = pipeline_stages[s].has_value();
+  }
+
+  int inflight_old = inflight_count_reg;
+  bool space_for_two = (inflight_old <= 2);
+  int inflight_incr = 0;
+  int inflight_decr = 0;
+
+  if (!stalling) {
+    bool exit_happened = false;
+    int exit_burst_len = 0;
+    bool exit_is_store = false;
+
+    if (pipeline_stages[EXIT_STAGE]) {
+      auto &pipe_req = *pipeline_stages[EXIT_STAGE];
+      bool is_sram = is_sram_access(pipe_req.req);
+
+      if (is_sram) {
+        int bank_cycles = calculate_sram_bank_conflicts(pipe_req.req);
+        sram_queue.push(bank_cycles);
+        if (sram_processing_remaining == 0) {
+          sram_processing_remaining = sram_queue.front();
+          sram_queue.pop();
+        }
+      } else {
+        exit_is_store = pipe_req.req.is_store;
+        if (!pipe_req.req.addrs.empty()) {
+          std::vector<uint64_t> phys = build_translated_lane_addrs(
+              pipe_req.req.warp, pipe_req.req.addrs, pipe_req.req.active_threads);
+          int bursts = calculate_bursts(phys, pipe_req.req.bytes, pipe_req.req.is_store);
+          int groups = calculate_request_count(phys, pipe_req.req.bytes);
+          exit_burst_len = (groups > 0) ? (bursts + groups - 1) / groups : 1;
+        } else {
+          exit_burst_len = 1;
+        }
+      }
+
+      process_mem_request(pipe_req.req);
+      pipeline_stages[EXIT_STAGE] = std::nullopt;
+      exit_happened = true;
+      inflight_decr = 1;
+    }
+
+    for (int s = (int)EXIT_STAGE - 1; s >= 0; s--) {
+      if (pipeline_stages[s] && !pipeline_stages[s + 1]) {
+        pipeline_stages[s + 1] = std::move(pipeline_stages[s]);
+        pipeline_stages[s] = std::nullopt;
+      }
+    }
+
+    if (exit_happened && exit_burst_len > 0) {
+      go5_busy_remaining = exit_is_store ? exit_burst_len : 1;
+    }
+  } else {
+    constexpr size_t STALL_ADVANCE_LIMIT = COALESCING_PIPELINE_DEPTH - 2;
+    for (int s = (int)STALL_ADVANCE_LIMIT; s >= 0; s--) {
+      if (old_occupied[s] && !old_occupied[s + 1]) {
+        pipeline_stages[s + 1] = std::move(pipeline_stages[s]);
+        pipeline_stages[s] = std::nullopt;
+      }
+    }
+  }
+
+  bool can_consume = space_for_two
+                   && (!stalling || !old_occupied[1])
+                   && go5_busy_remaining == 0
+                   && coalescing_remaining == 0;
+
+  if (can_consume) {
+    bool consumed = false;
+
+    if (coalescing_waiting && !pipeline_stages[0]) {
+      if (!pending_request_queue.empty()) {
+        PipelineRequest pipe_req;
+        pipe_req.req = pending_request_queue.front();
+        pending_request_queue.pop();
+        pipeline_stages[0] = pipe_req;
+        coalescing_waiting = false;
+        consumed = true;
+        inflight_incr = 1;
+      }
+    }
+
+    if (!consumed && !coalescing_waiting && !pending_request_queue.empty()
+        && !pipeline_stages[0]) {
+      MemRequest &front = pending_request_queue.front();
+      int groups = 0;
+      if (!front.is_fence && !front.addrs.empty()) {
+        std::vector<uint64_t> phys = build_translated_lane_addrs(
+            front.warp, front.addrs, front.active_threads);
+        groups = calculate_request_count(phys, front.bytes);
+      }
+      if (groups <= 1) {
+        PipelineRequest pipe_req;
+        pipe_req.req = pending_request_queue.front();
+        pending_request_queue.pop();
+        pipeline_stages[0] = pipe_req;
+        inflight_incr = 1;
+      } else {
+        coalescing_remaining = groups - 1;
+      }
+    }
+  }
+
+  inflight_count_reg = inflight_count_reg + inflight_incr - inflight_decr;
+
+  if (dram_queue_depth > 0)
+    dram_queue_depth--;
+
   // Decrement latency counters for blocked warps
   for (auto &[key, val] : blocked_warps) {
     if (val > 0)
@@ -843,34 +1082,6 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
   }
   
   if (req.is_fence) {
-    bool has_pending_ops = false;
-    
-    // Check pending_request_queue (operations queued after the fence)
-    std::queue<MemRequest> temp_queue = pending_request_queue;
-    while (!temp_queue.empty()) {
-      if (temp_queue.front().warp == req.warp && !temp_queue.front().is_fence) {
-        has_pending_ops = true;
-        break;
-      }
-      temp_queue.pop();
-    }
-    
-    // Check pipeline_queue (operations currently in pipeline)
-    if (!has_pending_ops) {
-      std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
-      while (!temp_pipeline.empty()) {
-        if (temp_pipeline.front().req.warp == req.warp && !temp_pipeline.front().req.is_fence) {
-          has_pending_ops = true;
-          break;
-        }
-        temp_pipeline.pop();
-      }
-    }
-    
-    // If there are pending operations, delay fence completion (latency choice is a hack)
-    if (has_pending_ops && blocked_warps.find(req.warp) != blocked_warps.end()) {
-      blocked_warps[req.warp] = COALESCING_PIPELINE_DEPTH + SIM_DRAM_LATENCY + 5;
-    }
   } else if (req.is_atomic) {
     // Process atomic add: read old value, add to it, write back, return old value
     std::map<size_t, int> results;
@@ -924,6 +1135,107 @@ void CoalescingUnit::process_mem_request(const MemRequest &req) {
     
     load_results_map[req.warp] = std::make_pair(req.rd_reg, results);
   }
+
+  if (!req.is_fence && !req.addrs.empty() && is_sram_access(req)) {
+    if (!req.is_store) {
+      auto it = blocked_warps.find(req.warp);
+      if (it != blocked_warps.end()) {
+        size_t queue_wait = sram_processing_remaining;
+        std::queue<int> tmp = sram_queue;
+        while (!tmp.empty()) {
+          queue_wait += tmp.front();
+          tmp.pop();
+        }
+        size_t sram_latency = queue_wait + BANKED_SRAM_LATENCY;
+        if (sram_latency > it->second) {
+          it->second = sram_latency;
+        }
+      }
+    }
+  }
+
+  if (req.is_fence) {
+    int beats = 1;
+    int groups = 1;
+
+    if (dram_trace && !req.warp->is_cpu) {
+      uint64_t cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+      *dram_trace << cycle << "," << req.warp->warp_id << ","
+                  << "F" << "," << beats << "," << groups << ","
+                  << "DRAM" << "," << "0x0"
+                  << "\n";
+    }
+
+    size_t first_resp_arrival = tick_counter + 2 + dram_queue_depth + SIM_DRAM_LATENCY;
+    size_t total_resp_processing = static_cast<size_t>(beats + groups);
+    size_t resp_start = std::max(first_resp_arrival, next_dram_resp_available);
+    next_dram_resp_available = resp_start + total_resp_processing;
+    size_t group_complete_tick = next_dram_resp_available;
+    dram_response_schedule.push({group_complete_tick, groups});
+
+    size_t resume_tick = next_dram_resp_available + 3;
+    size_t dram_latency = resume_tick - tick_counter;
+
+    auto it = blocked_warps.find(req.warp);
+    if (it != blocked_warps.end()) {
+      if (dram_latency > static_cast<size_t>(it->second)) {
+        it->second = dram_latency;
+      }
+    }
+
+    dram_queue_depth += beats;
+    dram_inflight += groups;
+  }
+
+  if (!req.is_fence && !req.addrs.empty()) {
+    std::vector<uint64_t> phys_addrs = build_translated_lane_addrs(
+        req.warp, req.addrs, req.active_threads);
+    int beats = calculate_bursts(phys_addrs, req.bytes, req.is_store);
+    bool is_sram = is_sram_access(req);
+    int groups = calculate_request_count(phys_addrs, req.bytes);
+
+    if (dram_trace && !req.warp->is_cpu) {
+      uint64_t cycle = GPUStatisticsManager::instance().get_gpu_cycles();
+      char type = req.is_atomic ? 'A' : (req.is_store ? 'S' : 'L');
+      uint64_t addr = 0;
+      if (!phys_addrs.empty()) {
+        for (auto a : phys_addrs) { if (a != SIM_SHARED_SRAM_BASE) { addr = a; break; } }
+      }
+      *dram_trace << cycle << "," << req.warp->warp_id << ","
+                  << type << "," << beats << "," << groups << ","
+                  << (is_sram ? "SRAM" : "DRAM") << ","
+                  << "0x" << std::hex << (addr >> DRAM_BEAT_LOG_BYTES) << std::dec
+                  << "\n";
+    }
+
+    if (beats > 0) {
+      if (!req.is_store) {
+        size_t first_resp_arrival = tick_counter + 2 + dram_queue_depth + SIM_DRAM_LATENCY;
+
+        size_t total_resp_processing = static_cast<size_t>(beats + groups);
+
+        size_t resp_start = std::max(first_resp_arrival, next_dram_resp_available);
+        next_dram_resp_available = resp_start + total_resp_processing;
+
+        size_t group_complete_tick = next_dram_resp_available;
+        dram_response_schedule.push({group_complete_tick, groups});
+
+        size_t resume_tick = next_dram_resp_available + 3;
+        size_t dram_latency = resume_tick - tick_counter;
+
+        auto it = blocked_warps.find(req.warp);
+        if (it != blocked_warps.end()) {
+          if (dram_latency > static_cast<size_t>(it->second)) {
+            it->second = dram_latency;
+          }
+        }
+
+        dram_inflight += groups;
+      }
+
+      dram_queue_depth += beats;
+    }
+  }
 }
 
 std::pair<unsigned int, std::map<size_t, int>> CoalescingUnit::get_load_results(Warp *warp) {
@@ -951,11 +1263,8 @@ bool CoalescingUnit::has_pending_memory_ops(Warp *warp) {
     temp_queue.pop();
   }
   
-  // Check pipeline_queue for this warp
-  std::queue<PipelineRequest> temp_pipeline = pipeline_queue;
-  while (!temp_pipeline.empty()) {
-    if (temp_pipeline.front().req.warp == warp) return true;
-    temp_pipeline.pop();
+  for (size_t s = 0; s < COALESCING_PIPELINE_DEPTH; s++) {
+    if (pipeline_stages[s] && pipeline_stages[s]->req.warp == warp) return true;
   }
   
   return false;

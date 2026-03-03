@@ -1,5 +1,6 @@
 #include "host_gpu_control.hpp"
 #include "../stats/stats.hpp"
+#include "../mem/mem_coalesce.hpp"
 #include "config.hpp"
 
 HostGPUControl::HostGPUControl()
@@ -25,10 +26,14 @@ void HostGPUControl::launch_kernel() {
   GPUStatisticsManager::instance().reset_gpu_retries();
   GPUStatisticsManager::instance().reset_gpu_susps();
   GPUStatisticsManager::instance().reset_gpu_active_cpu_dram_accs();
-  
+
+  if (coalescing_unit) {
+    coalescing_unit->reset_dram_state();
+  }
+
   for (int i = 0; i < NUM_WARPS; i++) {
     Warp *warp = new Warp(i, NUM_LANES, kernel_pc, false);
-    scheduler->insert_warp(warp);
+    scheduler->insert_warp_immediate(warp);
   }
 
   gpu_active = true;
@@ -43,7 +48,9 @@ void HostGPUControl::launch_kernel() {
 }
 
 bool HostGPUControl::is_gpu_active() {
-  return gpu_active && scheduler->is_active();
+  bool cu_busy = coalescing_unit && coalescing_unit->is_busy_for_pipeline(false);
+  bool pipeline_busy = pipeline && pipeline->has_active_stages();
+  return gpu_active && (scheduler->is_active() || cu_busy || pipeline_busy);
 }
 
 void HostGPUControl::buffer_data(char val) { 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils.hpp"
+#include "config.hpp"
 
 /*
  * An individual warp. This maintains the per-warp state
@@ -39,6 +40,7 @@ public:
   Warp *warp;
   std::vector<uint64_t> active_threads;
   llvm::MCInst inst;
+  bool has_result = false;
 };
 
 /*
@@ -100,8 +102,28 @@ public:
    * Set pipeline active state (matching SIMTight's pipelineActive)
    * Pipeline stays active from kernel launch until all warps terminate
    */
-  void set_pipeline_active(bool active) { pipeline_active = active; }
+  void set_pipeline_active(bool active) {
+    pipeline_active = active;
+    if (active) {
+      completed_warps = 0;
+      pipeline_deactivating = false;
+    }
+  }
   bool is_pipeline_active() const { return pipeline_active; }
+
+  void notify_warp_terminated() {
+    completed_warps++;
+    if (completed_warps >= NUM_WARPS) {
+      pipeline_deactivating = true;
+    }
+  }
+
+  void apply_deferred_deactivation() {
+    if (pipeline_deactivating) {
+      pipeline_active = false;
+      pipeline_deactivating = false;
+    }
+  }
 
   void set_debug(bool enabled) {
     for (auto stage : stages) {
@@ -112,6 +134,8 @@ public:
 private:
   std::vector<std::shared_ptr<PipelineStage>> stages;
   bool pipeline_active = false;  // Matching SIMTight's pipelineActive
+  size_t completed_warps = 0;
+  bool pipeline_deactivating = false;
 };
 
 /*

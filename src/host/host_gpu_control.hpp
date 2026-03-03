@@ -1,10 +1,13 @@
 #include "gpu/pipeline_warp_scheduler.hpp"
 #include "utils.hpp"
 
+class CoalescingUnit;
+
 class HostGPUControl {
 public:
   HostGPUControl();
   void set_scheduler(std::shared_ptr<WarpScheduler> scheduler);
+  void set_coalescing_unit(CoalescingUnit *cu) { coalescing_unit = cu; }
 
   // Kernel config
   void set_pc(uint64_t pc);
@@ -31,6 +34,7 @@ public:
 private:
   std::shared_ptr<WarpScheduler> scheduler;
   Pipeline *pipeline = nullptr;
+  CoalescingUnit *coalescing_unit = nullptr;
   uint64_t kernel_pc;
   uint64_t arg_ptr;
   uint64_t dims;

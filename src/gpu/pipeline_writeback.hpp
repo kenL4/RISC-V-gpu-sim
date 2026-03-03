@@ -1,6 +1,7 @@
 #include "mem/mem_coalesce.hpp"
 #include "pipeline.hpp"
 #include "register_file.hpp"
+#include "trace/trace.hpp"
 #include "utils.hpp"
 
 /*
@@ -16,6 +17,8 @@ public:
   bool is_active() override;
   
   std::function<void(Warp *warp)> insert_warp;
+  std::function<void(Warp *warp)> insert_warp_with_susp_delay;
+  void set_instr_tracer(Tracer *t) { instr_tracer = t; }
 
   ~WritebackResume() {};
 
@@ -23,4 +26,5 @@ private:
   CoalescingUnit *cu;
   RegisterFile *rf;
   bool is_cpu_pipeline;  // True if this is the CPU pipeline, false if GPU
+  Tracer *instr_tracer = nullptr;
 };

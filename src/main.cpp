@@ -26,13 +26,12 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
                               Tracer *instr_tracer = nullptr) {
   Pipeline *p = new Pipeline();
 
-  // Construct stages (matching SIMTight's 7-stage pipeline)
   if (is_cpu) {
-    p->add_stage<WarpScheduler>(1, 1, im->get_base_addr(), cu);  // Stage 0: CPU = 1x1
+    p->add_stage<WarpScheduler>(1, 1, im->get_base_addr(), cu);
   } else {
-    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), cu, false);  // Stage 0: GPU
+    p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), cu, false);
   }
-  p->add_stage<ActiveThreadSelection>();                     // Stage 1
+  p->add_stage<ActiveThreadSelection>();
   p->add_stage<InstructionFetch>(im, disasm);                // Stage 2
   p->add_stage<OperandFetch>();                              // Stage 3
   p->add_stage<OperandLatch>();                              // Stage 4
@@ -49,16 +48,30 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
 
   if (instr_tracer) {
     execute_stage->set_instr_tracer(instr_tracer);
+    writeback_stage->set_instr_tracer(instr_tracer);
   }
   
-  // Set up warp insertion callback (used by both execute and writeback stages)
   auto insert_warp_callback = [ws = warp_scheduler_stage](Warp *warp) {
     ws->insert_warp(warp);
   };
   execute_stage->insert_warp = insert_warp_callback;
-  
+
+  execute_stage->insert_warp_retry = [ws = warp_scheduler_stage](Warp *warp) {
+    ws->insert_warp_retry(warp);
+  };
+
+  if (!is_cpu) {
+    execute_stage->notify_warp_terminated = [pipeline = p]() {
+      pipeline->notify_warp_terminated();
+    };
+  }
+
   // Set up warp insertion for writeback stage
   writeback_stage->insert_warp = insert_warp_callback;
+
+  writeback_stage->insert_warp_with_susp_delay = [ws = warp_scheduler_stage](Warp *warp) {
+    ws->insert_warp_retry(warp);
+  };
 
   // Initialize latches (7 stages = 7 latches)
   // Note: Latches must persist for the lifetime of the pipeline, so we use heap allocation
@@ -67,15 +80,15 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   for (int i = 0; i < 7; i++) {
     latches[i] = new PipelineLatch();
   }
-  
+
   // Connect latches in a circular pattern (stage N output -> stage N+1 input)
-  p->get_stage(0)->set_latches(latches[6], latches[0]);  // WarpScheduler
-  p->get_stage(1)->set_latches(latches[0], latches[1]);  // ActiveThreadSelection
-  p->get_stage(2)->set_latches(latches[1], latches[2]);  // InstructionFetch
-  p->get_stage(3)->set_latches(latches[2], latches[3]);  // OperandFetch
-  p->get_stage(4)->set_latches(latches[3], latches[4]);  // OperandLatch
-  p->get_stage(5)->set_latches(latches[4], latches[5]);  // ExecuteSuspend
-  p->get_stage(6)->set_latches(latches[5], latches[6]);  // WritebackResume
+  p->get_stage(0)->set_latches(latches[6], latches[0]);
+  p->get_stage(1)->set_latches(latches[0], latches[1]);
+  p->get_stage(2)->set_latches(latches[1], latches[2]);
+  p->get_stage(3)->set_latches(latches[2], latches[3]);
+  p->get_stage(4)->set_latches(latches[3], latches[4]);
+  p->get_stage(5)->set_latches(latches[4], latches[5]);
+  p->get_stage(6)->set_latches(latches[5], latches[6]);
 
   return p;
 }
@@ -102,6 +115,8 @@ int main(int argc, char *argv[]) {
                             cxxopts::value<std::string>())(
       "trace-coalesce", "Write coalesce (MEM_REQ_ISSUE, DRAM_REQ_ISSUE) to trace-file; by default coalesce logs are hidden")(
       "instr-trace-file", "Trace all GPU instruction execution (specify filename, e.g. --instr-trace-file=instr.log)",
+                            cxxopts::value<std::string>())(
+      "dram-trace-file", "Trace DRAM/SRAM accesses exiting CU pipeline (specify filename, e.g. --dram-trace-file=dram.log)",
                             cxxopts::value<std::string>())(
       "q,quick", "Disable buffering for outputting earlier than simulation end")(
       "h,help", "Show help");
@@ -181,6 +196,16 @@ int main(int argc, char *argv[]) {
   }
   
   CoalescingUnit cu(&scratchpad_mem, trace_file_ptr);
+  if (instr_tracer) {
+    cu.set_instr_tracer(instr_tracer.get());
+  }
+  std::unique_ptr<std::ofstream> dram_trace_file;
+  if (result.count("dram-trace-file")) {
+    dram_trace_file = std::make_unique<std::ofstream>(result["dram-trace-file"].as<std::string>());
+    *dram_trace_file << "cycle,warp,type,beats,groups,dest,addr\n";
+    cu.set_dram_trace(dram_trace_file.get());
+    debug_log("DRAM trace enabled");
+  }
   debug_log("Instantiated memory coalescing unit");
 
   RegisterFile rf(NUM_REGISTERS, NUM_LANES);
@@ -202,24 +227,25 @@ int main(int argc, char *argv[]) {
   gpu_controller.set_scheduler(
       std::dynamic_pointer_cast<WarpScheduler>(gpu_pipeline->get_stage(0)));
   gpu_controller.set_pipeline(gpu_pipeline);
+  gpu_controller.set_coalescing_unit(&cu);
 
   // Execute the threads
   while (cpu_pipeline->has_active_stages() ||
          gpu_pipeline->has_active_stages() ||
          gpu_pipeline->is_pipeline_active()) {
     
+    gpu_pipeline->apply_deferred_deactivation();
+
     GPUStatisticsManager::instance().set_gpu_pipeline_active(gpu_pipeline->is_pipeline_active());
 
     cpu_pipeline->execute();
     gpu_pipeline->execute();
     cu.tick();
 
+    GPUStatisticsManager::instance().tick_instr_pipeline();
+
     if (gpu_pipeline->is_pipeline_active()) {
       GPUStatisticsManager::instance().increment_gpu_cycles();
-    }
-    
-    if (gpu_pipeline->is_pipeline_active() && !gpu_pipeline->has_active_stages()) {
-      gpu_pipeline->set_pipeline_active(false);
     }
   }
 

@@ -18,6 +18,8 @@ public:
   bool is_active() override;
   void set_active(bool a) { active = a; }
   void insert_warp(Warp *warp);
+  void insert_warp_retry(Warp *warp);
+  void insert_warp_immediate(Warp *warp);
   bool did_issue_warp() const { return warp_issued_this_cycle; }
   void set_warps_per_block(unsigned n);
 
@@ -28,9 +30,10 @@ private:
   int warp_count;
   std::queue<Warp *> warp_queue;
   std::queue<Warp *> new_warp_queue;
-  // 1-cycle re-insertion delay (matching SIMTight's extra pipeline latency, e.g. Stage 1 substages)
-  std::queue<Warp *> reinsert_delay_queue;  // warps that completed this cycle, available next cycle
-  std::queue<Warp *> reinsert_ready;       // warps that completed last cycle, merge into warp_queue this cycle
+  std::queue<Warp *> reinsert_delay_queue;
+  std::queue<Warp *> reinsert_ready;
+  std::queue<Warp *> retry_extra_delay_queue;
+  std::queue<Warp *> retry_extra_ready;
   bool active = true;
   bool warp_issued_this_cycle = false;
 

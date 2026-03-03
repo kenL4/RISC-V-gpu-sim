@@ -10,6 +10,7 @@ InstructionFetch::InstructionFetch(InstructionMemory *im,
 void InstructionFetch::execute() {
   if (!PipelineStage::input_latch->updated)
     return;
+  if (PipelineStage::output_latch->updated) return;
 
   Warp *warp = PipelineStage::input_latch->warp;
   uint64_t thread_id = PipelineStage::input_latch->active_threads[0];
@@ -34,5 +35,5 @@ void InstructionFetch::execute() {
 };
 
 bool InstructionFetch::is_active() {
-  return PipelineStage::input_latch->updated;
+  return PipelineStage::input_latch->updated || PipelineStage::output_latch->updated;
 }

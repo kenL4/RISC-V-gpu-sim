@@ -286,18 +286,21 @@ void test_execution_unit() {
     uint32_t opcode = encode_i_type(2, 1, 1, 4, OP_OP_IMM);
     llvm::MCInst inst = run_inst(&warp, opcode, "SLLI x4, x1, 2");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 40);
 
     // SRLI x4, x1, 1 (10 >> 1 = 5)
     opcode = encode_i_type(1, 1, 5, 4, OP_OP_IMM);
     inst = run_inst(&warp, opcode, "SRLI x4, x1, 1");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 5);
 
     // SRAI x4, x1, 1 (10 >> 1 arithmetic = 5)
     opcode = encode_i_type((0x20 << 5) | 1, 1, 5, 4, OP_OP_IMM);
     inst = run_inst(&warp, opcode, "SRAI x4, x1, 1");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 5);
 
     // ADDI x5, x0, 2
@@ -309,18 +312,21 @@ void test_execution_unit() {
     opcode = encode_r_type(0, 5, 1, 1, 4, OP_OP);
     inst = run_inst(&warp, opcode, "SLL x4, x1, x5");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 40);
 
     // SRL x4, x1, x5 (10 >> 2 = 2)
     opcode = encode_r_type(0, 5, 1, 5, 4, OP_OP); // funct3=5
     inst = run_inst(&warp, opcode, "SRL x4, x1, x5");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 2);
 
     // SRA x4, x1, x5 (10 >> 2 = 2)
     opcode = encode_r_type(0x20, 5, 1, 5, 4, OP_OP); // funct3=5, funct7=0x20
     inst = run_inst(&warp, opcode, "SRA x4, x1, x5");
     eu.execute(&warp, active_threads, inst);
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 2);
   }
 
@@ -341,21 +347,21 @@ void test_execution_unit() {
     uint32_t opcode = encode_r_type(1, 2, 1, 0, 4, OP_OP);
     inst = run_inst(&warp, opcode, "MUL x4, x1, x2");
     eu.execute(&warp, active_threads, inst);
-    // MUL now executes immediately
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 200);
 
     // DIVU x4, x2, x1 (20 / 10 = 2)
     opcode = encode_r_type(1, 1, 2, 5, 4, OP_OP);
     inst = run_inst(&warp, opcode, "DIVU x4, x2, x1");
     eu.execute(&warp, active_threads, inst);
-    // DIVU now executes immediately
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 2);
 
     // REMU x4, x1, x2 (10 % 20 = 10)
     opcode = encode_r_type(1, 2, 1, 7, 4, OP_OP);
     inst = run_inst(&warp, opcode, "REMU x4, x1, x2");
     eu.execute(&warp, active_threads, inst);
-    // REMU now executes immediately
+    complete_load_operation(cu, rf, &warp);
     assert(rf.get_register(0, 0, llvm::RISCV::X4) == 10);
   }
 

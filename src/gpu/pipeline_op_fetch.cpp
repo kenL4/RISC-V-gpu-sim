@@ -6,7 +6,8 @@ OperandFetch::OperandFetch() {
 
 void OperandFetch::execute() {
     if (!input_latch->updated) return;
-    
+    if (output_latch->updated) return;
+
     Warp *warp = input_latch->warp;
     const llvm::MCInst &inst = input_latch->inst;
 
@@ -27,5 +28,5 @@ void OperandFetch::execute() {
 };
 
 bool OperandFetch::is_active() {
-    return input_latch->updated;
+    return input_latch->updated || output_latch->updated;
 }
