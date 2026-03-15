@@ -60,6 +60,7 @@ private:
 
   static uint64_t firstHot(uint64_t x);
   std::pair<uint64_t, uint64_t> fair_scheduler(uint64_t hist, uint64_t avail);
+  uint64_t random_scheduler(uint64_t avail);
   void flush_new_warps();
   void barrier_release_unit();
 };

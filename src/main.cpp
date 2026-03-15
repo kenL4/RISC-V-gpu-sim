@@ -94,6 +94,8 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
 }
 
 int main(int argc, char *argv[]) {
+  srand((unsigned) time(NULL));
+
   cxxopts::Options options("RISCVGpuSim",
                            "A software simulator for a RISC-V GPU");
 
@@ -119,6 +121,8 @@ int main(int argc, char *argv[]) {
       "dram-trace-file", "Trace DRAM/SRAM accesses exiting CU pipeline (specify filename, e.g. --dram-trace-file=dram.log)",
                             cxxopts::value<std::string>())(
       "q,quick", "Disable buffering for outputting earlier than simulation end")(
+      "warp-scheduler", "Choose a warp scheduler from 'baseline' or 'random'",
+                            cxxopts::value<std::string>())(
       "h,help", "Show help");
   options.parse_positional({"filename"});
   options.positional_help("<Input File>");
@@ -135,6 +139,12 @@ int main(int argc, char *argv[]) {
   config.setRegisterDump(result.count("regdump") > 0);
   config.setStatsOnly(result.count("statsonly") > 0);
   config.setQuick(result.count("quick") > 0);
+  if (result.count("warp-scheduler") > 0) {
+    std::string value = result["warp-scheduler"].as<std::string>();
+    if (value == "random") {
+      config.setWarpScheduler(RANDOM);
+    }
+  }
 
   std::string filename = result["filename"].as<std::string>();
 

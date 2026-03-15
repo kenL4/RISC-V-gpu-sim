@@ -12,6 +12,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <random>
 #include <vector>
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/MC/MCAsmInfo.h"

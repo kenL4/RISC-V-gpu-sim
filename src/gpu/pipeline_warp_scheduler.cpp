@@ -47,6 +47,17 @@ std::pair<uint64_t, uint64_t> WarpScheduler::fair_scheduler(uint64_t hist, uint6
   }
 }
 
+uint64_t WarpScheduler::random_scheduler(uint64_t avail) {
+  std::vector<int> free_warps;
+  for (int i = 0; i < 64; i++) {
+    if (avail & 1) free_warps.push_back(i);
+    avail >>= 1;
+  }
+  // Apparently, this might be kind of dodgy since rand() is poor quality on simple impls
+  int choice = rand() % free_warps.size();
+  return (uint64_t) 1 << free_warps[choice];
+}
+
 void WarpScheduler::execute() {
   warp_issued_this_cycle = false;
 
@@ -114,9 +125,14 @@ void WarpScheduler::execute() {
   if (chosen_warp_buffer == nullptr) {
     uint64_t chosen_bitmask = 0;
     if (avail != 0) {
-      std::pair<uint64_t, uint64_t> result = fair_scheduler(sched_history, avail);
-      sched_history = result.first;
-      chosen_bitmask = result.second;
+      WarpSchedulerConfig scheduler_choice = Config::instance().warpScheduler();
+      if (scheduler_choice == BASELINE) {
+        std::pair<uint64_t, uint64_t> result = fair_scheduler(sched_history, avail);
+        sched_history = result.first;
+        chosen_bitmask = result.second;
+      } else if (scheduler_choice == RANDOM) {
+        chosen_bitmask = random_scheduler(avail);
+      }
     }
 
     Warp *chosen_warp = nullptr;

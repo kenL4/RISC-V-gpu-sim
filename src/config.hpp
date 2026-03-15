@@ -29,6 +29,12 @@ constexpr size_t NUM_LANES = 32;
 constexpr size_t NUM_WARPS = 64;
 constexpr size_t NUM_REGISTERS = 32;  // RISC-V has 32 general-purpose registers
 
+// For my warp scheduling extensibility
+enum WarpSchedulerConfig {
+  BASELINE,
+  RANDOM
+};
+
 // For command line options that I pass
 class Config {
 public:
@@ -52,11 +58,15 @@ public:
   void setQuick(bool value) {quick = value; }
   bool isQuick() { return quick; }
 
+  void setWarpScheduler(WarpSchedulerConfig value) {scheduler = value;}
+  WarpSchedulerConfig warpScheduler() { return scheduler;}
+
 private:
   bool debug = false;
   bool regDump = false;
   bool cpuDebug = false;
   bool statsOnly = false;
   bool quick = false;
+  WarpSchedulerConfig scheduler = BASELINE;
   Config() = default;
 };
