@@ -402,194 +402,87 @@ bool ExecutionUnit::sll(Warp *warp, std::vector<size_t> active_threads,
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
-      unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
-      rf->set_register(warp->warp_id, thread, rd,
-                       static_cast<uint64_t>(rs1) << shamt, warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
-    results[thread] = static_cast<int>(static_cast<uint64_t>(rs1) << shamt);
+    rf->set_register(warp->warp_id, thread, rd,
+                     static_cast<int>(static_cast<uint64_t>(rs1) << shamt), warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::slli(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int64_t imm = in->getOperand(2).getImm();
-      rf->set_register(warp->warp_id, thread, rd,
-                       static_cast<int>(static_cast<uint64_t>(rs1) << imm), warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    results[thread] = static_cast<int>(static_cast<uint64_t>(rs1) << imm);
+    rf->set_register(warp->warp_id, thread, rd,
+                     static_cast<int>(static_cast<uint64_t>(rs1) << imm), warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::srl(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
-      unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
-      uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
-      rf->set_register(warp->warp_id, thread, rd,
-                       static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> shamt), warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
     uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
-    results[thread] = static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> shamt);
+    rf->set_register(warp->warp_id, thread, rd,
+                     static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> shamt), warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::srli(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int64_t imm = in->getOperand(2).getImm();
-      uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
-      rf->set_register(warp->warp_id, thread, rd,
-                       static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> imm), warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
     uint32_t rs1_unsigned = static_cast<uint32_t>(rs1);
-    results[thread] = static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> imm);
+    rf->set_register(warp->warp_id, thread, rd,
+                     static_cast<int>(static_cast<uint64_t>(rs1_unsigned) >> imm), warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::sra(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
-      unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
-      rf->set_register(warp->warp_id, thread, rd, rs1 >> shamt, warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int rs2 = rf->get_register(warp->warp_id, thread, in->getOperand(2).getReg(), warp->is_cpu);
     unsigned int shamt = static_cast<unsigned int>(rs2) & 0x1F;
-    results[thread] = rs1 >> shamt;
+    rf->set_register(warp->warp_id, thread, rd, rs1 >> shamt, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::srai(Warp *warp, std::vector<size_t> active_threads,
                          MCInst *in) {
   assert(in->getNumOperands() == 3);
   unsigned int rd = in->getOperand(0).getReg();
 
-  if (warp->is_cpu) {
-    for (auto thread : active_threads) {
-      int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
-      int64_t imm = in->getOperand(2).getImm();
-      rf->set_register(warp->warp_id, thread, rd, rs1 >> imm, warp->is_cpu);
-      warp->pc[thread] += 4;
-    }
-    return active_threads.size() > 0;
-  }
-
-  if (!cu->can_use_multiplier()) {
-    return false;
-  }
-  cu->acquire_multiplier(warp);
-
-  std::map<size_t, int> results;
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, in->getOperand(1).getReg(), warp->is_cpu);
     int64_t imm = in->getOperand(2).getImm();
-    results[thread] = rs1 >> imm;
+    rf->set_register(warp->warp_id, thread, rd, rs1 >> imm, warp->is_cpu);
     warp->pc[thread] += 4;
   }
-  cu->suspend_for_func_unit(warp, SIM_MUL_LATENCY, rd, results);
-  return false;
+  return active_threads.size() > 0;
 }
 bool ExecutionUnit::lui(Warp *warp, std::vector<size_t> active_threads,
                         MCInst *in) {
