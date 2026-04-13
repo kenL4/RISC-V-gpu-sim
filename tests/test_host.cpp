@@ -46,11 +46,14 @@ void test_host_gpu_control() {
   ctrl.buffer_data('i');
   assert(ctrl.get_buffer() == "Hi");
 
+  auto scheduler = std::make_shared<WarpScheduler>(32, 8, 0x0, nullptr, false);
+  ctrl.set_scheduler(scheduler);
+
   // Launch kernel
   ctrl.launch_kernel();
 
   assert(ctrl.is_gpu_active());
-  assert(scheduler->is_active());
+  assert(scheduler->is_active()); // we should make sure that the warp scheduler forced inserton is working
 
   std::cout << "test_host_gpu_control passed!" << std::endl;
 }
