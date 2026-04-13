@@ -15,24 +15,23 @@ void test_data_memory_load_store() {
   uint64_t addr = 0x1000;
   uint64_t val = 0x1122334455667788;
 
-  // Store 8 bytes
+  // store a wrd
   mem.store(addr, 8, val);
 
-  // Load back 8 bytes
+  // read it back
   int64_t loaded_8 = mem.load(addr, 8);
   assert(static_cast<uint64_t>(loaded_8) == val);
 
-  // Load back 4 bytes (little endian) -> 0x55667788
+  // load a half-word
   int64_t loaded_4 = mem.load(addr, 4);
   assert(static_cast<uint64_t>(loaded_4) == 0x55667788);
 
-  // Load back 1 byte -> 0x88
+  // load a byte
   int64_t loaded_1 = mem.load(addr, 1);
   assert((loaded_1 & 0xFF) == 0x88);
   assert(loaded_1 == -120);
 
-  // Test Sign Extension
-  // Store 0xFF (which is -1 as signed 8-bit)
+  // make sure we deal with sign-ext ension
   mem.store(addr + 0x10, 1, 0xFF);
   int64_t loaded_signed = mem.load(addr + 0x10, 1);
   assert(loaded_signed == -1);
@@ -71,8 +70,6 @@ void test_coalesce_latency() {
   DataMemory dmem;
   CoalescingUnit unit(&dmem);
 
-  // Create a dummy warp
-  // Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
   Warp w(0, 32, 0x1000, false);
 
   assert(!unit.is_busy());
@@ -98,10 +95,6 @@ void test_coalesce_latency() {
     if (ticks > 200)
       break; // Safety break
   }
-
-  // Without cache: latency = SIM_DRAM_LATENCY + (bursts - 1) for pipelined access
-  // All addresses 0x2000-0x200C are in the same block (coalesced into 2 bursts for word access in SameBlock mode)
-  // Expected latency = SIM_DRAM_LATENCY + 1 (for 2 bursts: first has full latency, second is pipelined)
   assert(ticks >= static_cast<int>(SIM_DRAM_LATENCY));
 
   std::cout << "test_coalesce_latency passed!" << std::endl;

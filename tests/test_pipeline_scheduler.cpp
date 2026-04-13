@@ -15,9 +15,9 @@ void test_warp_scheduler() {
 
   // 1. Initial Sequence (Expected: 0, 1, 2, 3)
   // WarpScheduler has 2-cycle latency (2 substages)
-  // Cycle 0: 1st substage - choose warp 0, store in buffer (no output)
-  // Cycle 1: 2nd substage - output warp 0, 1st substage - choose warp 1
-  // Cycle 2: 2nd substage - output warp 1, 1st substage - choose warp 2
+  // Cycle 0: 1st sbstage - choose warp 0, store in buffer (no output)
+  // Cycle 1: 2nd sbstage - output warp 0, 1st substage - choose warp 1
+  // Cycle 2: 2nd sbstage - output warp 1, 1st substage - choose warp 2
   // etc.
   std::cout << "  Phase 1: Round Robin" << std::endl;
   for (int i = 0; i < 10; ++i) {  // Increased from 8 to 10 to account for initial delay
@@ -34,10 +34,6 @@ void test_warp_scheduler() {
 
   // 2. Suspend 1
   std::cout << "  Phase 2: Suspend Warp 1" << std::endl;
-  // Based on previous loop, we saw warps with 2-cycle latency
-  // Need to run until we get warp 1
-
-  // Run until we get 1
   Warp *warp1 = nullptr;
   int cycles = 0;
   while (warp1 == nullptr && cycles < 10) {
@@ -57,8 +53,6 @@ void test_warp_scheduler() {
   }
   assert(warp1 != nullptr);  // Should have found warp 1
 
-  // Now 1 is suspended and re-inserted.
-  // Verify 1 is skipped.
   std::cout << "  Phase 3: Verify Skipped" << std::endl;
   for (int i = 0; i < 8; ++i) {
     scheduler.execute();
@@ -73,12 +67,9 @@ void test_warp_scheduler() {
     }
   }
 
-  // 3. Unsuspend 1
   std::cout << "  Phase 4: Unsuspend Warp 1" << std::endl;
   if (warp1)
     warp1->suspended = false;
-
-  // Verify 1 returns
   bool found_1 = false;
   for (int i = 0; i < 8; ++i) {
     scheduler.execute();
