@@ -1,6 +1,6 @@
 SIMTIGHT_ROOT = $(realpath ../../../)
 
-APP_CPP = ThresholdNaive.cpp
+APP_CPP = VecAddCoalesced.cpp
 APP_HDR =
 RUN_CPP = Run.cpp
 RUN_H   =
