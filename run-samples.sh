@@ -14,6 +14,8 @@ APPS=(
   InHouse/StripedStencil
   InHouse/VecGCD
   InHouse/MotionEst
+  InHouse/VecAddCoalesced
+  InHouse/VecAddUncoalesced
 )
 
 make

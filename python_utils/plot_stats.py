@@ -105,8 +105,8 @@ def _bar_fig(kernels, mine_vals, simtight_vals, ylabel, title):
     """Build a grouped bar chart comparing Mine vs SIMTight."""
     fig = go.Figure(
         data=[
-            go.Bar(name="Mine", x=kernels, y=mine_vals),
-            go.Bar(name="SIMTight", x=kernels, y=simtight_vals),
+            go.Bar(name="Fair Scheduler", x=kernels, y=mine_vals),
+            go.Bar(name="Random Scheduler", x=kernels, y=simtight_vals),
         ]
     )
     fig.update_layout(
@@ -131,7 +131,7 @@ def plot_gpu_instrs(data, simtight):
     fig = _bar_fig(
         kernels, gpu_instrs, simtight_gpu_instrs, "Instrs", "GPU Instrs by GPU, Kernel"
     )
-    fig.show()
+    fig.write_image("figures/gpu_instrs.svg")
 
 
 def plot_gpu_cycles(data, simtight):
@@ -141,7 +141,7 @@ def plot_gpu_cycles(data, simtight):
     fig = _bar_fig(
         kernels, gpu_cycles, simtight_gpu_cycles, "Cycles", "GPU Cycles by GPU, Kernel"
     )
-    fig.show()
+    fig.write_image("figures/gpu_cycles.svg")
 
 
 def plot_dram_accs(data, simtight):
@@ -155,7 +155,7 @@ def plot_dram_accs(data, simtight):
         "DRAMAccs",
         "GPU DRAMAccs by GPU, Kernel",
     )
-    fig.show()
+    fig.write_image("figures/gpu_dram_accs.svg")
 
 
 def plot_ipc(data, simtight):
@@ -165,7 +165,7 @@ def plot_ipc(data, simtight):
     fig = _bar_fig(
         kernels, gpu_ipc, simtight_gpu_ipc, "IPC", "GPU IPC by GPU, Kernel"
     )
-    fig.show()
+    fig.write_image("figures/gpu_ipc.svg")
 
 
 def plot_gpu_retries(data, simtight):
@@ -179,7 +179,20 @@ def plot_gpu_retries(data, simtight):
         "Retries",
         "GPU Retries by GPU, Kernel",
     )
-    fig.show()
+    fig.write_image("figures/gpu_retries.svg")
+
+def plot_gpu_susps(data, simtight):
+    kernels = _common_kernels(data, simtight)
+    gpu_retries = [data[name].get("Susps", 0) for name in kernels]
+    simtight_gpu_retries = [simtight[name].get("Susps", 0) for name in kernels]
+    fig = _bar_fig(
+        kernels,
+        gpu_retries,
+        simtight_gpu_retries,
+        "Suspensions",
+        "GPU Suspensions by GPU, Kernel",
+    )
+    fig.write_image("figures/gpu_susps.svg")
 
 
 def plot_walltime(data, simtight):
@@ -189,7 +202,7 @@ def plot_walltime(data, simtight):
     fig = _bar_fig(
         kernels, mine_vals, simtight_vals, "Wall Time (ms)", "Wall-Clock Time by GPU, Kernel"
     )
-    fig.show()
+    fig.write_image("figures/gpu_walltime.svg")
 
 
 def plot_gpu_all(data, simtight):
@@ -198,6 +211,8 @@ def plot_gpu_all(data, simtight):
     plot_gpu_cycles(data, simtight)
     plot_gpu_instrs(data, simtight)
     plot_ipc(data, simtight)
+    plot_gpu_retries(data, simtight)
+    plot_gpu_susps(data, simtight)
     plot_walltime(data, simtight)
 
 
@@ -283,13 +298,13 @@ def plot_single_kernel(data, simtight, kernel_name, metric=None):
 
 
 if __name__ == "__main__":
-    data = read_simtight_trace("trace.log")
-    simtight = read_simtight_trace("trace_simtight.log")
+    data = read_simtight_trace("trace_random_scheduler.log")
+    simtight = read_simtight_trace("trace.log")
 
     # plot_gpu_instrs(data, simtight)
-    # plot_gpu_cycles(data, simtight)
+    plot_gpu_cycles(data, simtight)
     # plot_dram_accs(data, simtight)
-    plot_gpu_all(data, simtight)
+    # plot_gpu_all(data, simtight)
     #plot_single_kernel(data, simtight, "Samples/VecAdd", metric="Instrs")
 
     # Show BitonicSortLarge as three separate sub-kernels instead of one combined bar:
