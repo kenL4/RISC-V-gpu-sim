@@ -7,8 +7,6 @@ public:
     // This data structure represents a mapping from warp ID
     // to a registers_per_warp wide vector of the register value in each thread
     std::map<uint64_t, std::vector<std::vector<int>>> warp_id_to_registers;
-
-    // A mapping from warp id to thread to CSR
     std::map<uint64_t, std::vector<std::map<uint64_t, int>>> warp_id_to_csr;
     RegisterFile(size_t register_count, size_t thread_count);
     virtual int get_register(uint64_t warp_id, int thread, int reg, bool is_cpu = false);

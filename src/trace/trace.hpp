@@ -20,10 +20,9 @@ struct TraceEvent {
     uint64_t cycle;
     uint64_t pc;
     uint64_t warp_id;
-    int lane_id;  // 0-31 for thread/lane, -1 for N/A (e.g. DRAM, or legacy 4-field)
+    int lane_id;
     EventType event_type;
 
-    // For mem_reqs
     std::vector<uint64_t> addrs;
 
     TraceEvent() : lane_id(-1) {}

@@ -15,7 +15,7 @@ constexpr size_t MEM_REQ_QUEUE_CAPACITY = 32;
 
 constexpr size_t SIM_SHARED_SRAM_BASE = 0xBFFF0000;
 constexpr size_t SIM_SIMT_STACK_BASE = 0xC0000000;
-constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spilling rn
+constexpr size_t SIM_REG_SPILL_SIZE = 0x00080000; // I don't actually do any spilling rn but that is out of scope anyways
 constexpr size_t SIM_CPU_STACK_BASE = SIM_SHARED_SRAM_BASE - SIM_REG_SPILL_SIZE;
 constexpr size_t SIM_CPU_INITIAL_SP = SIM_CPU_STACK_BASE - 8;
 
@@ -27,9 +27,9 @@ constexpr size_t SIMT_LOG_WARPS = 6;
 // GPU pipeline configuration
 constexpr size_t NUM_LANES = 32;
 constexpr size_t NUM_WARPS = 64;
-constexpr size_t NUM_REGISTERS = 32;  // RISC-V has 32 general-purpose registers
+constexpr size_t NUM_REGISTERS = 32;
 
-// For my warp scheduling extensibility
+// For my warp scheduling extensibility verification
 enum WarpSchedulerConfig {
   BASELINE,
   RANDOM

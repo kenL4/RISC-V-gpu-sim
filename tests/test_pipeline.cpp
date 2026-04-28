@@ -121,14 +121,13 @@ void test_writeback_latch() {
   DataMemory dm;
   CoalescingUnit cu(&dm);
   RegisterFile rf(32, 32);
-  WritebackResume stage(&cu, &rf, true);  // true = CPU pipeline for test
+  WritebackResume stage(&cu, &rf, true);
 
   PipelineLatch input, output;
   input.updated = false;
   output.updated = false;
   stage.set_latches(&input, &output);
 
-  // Case 1: Pass through from input latch
   Warp warp1(0, 32, 0x0, false);
   input.warp = &warp1;
   input.updated = true;
@@ -138,22 +137,20 @@ void test_writeback_latch() {
   assert(output.updated == true);
   assert(output.warp == &warp1);
 
-  // Case 2: Resume from suspended warp (when input not updated)
   input.updated = false;
   output.updated = false;
 
-  Warp warp2(1, 32, 0x0, true);  // Use CPU warp to match CPU pipeline WritebackResume
+  Warp warp2(1, 32, 0x0, true);
   std::vector<uint64_t> addrs = {0x1000};
   cu.load(&warp2, addrs, 4, 0, {0});
   assert(warp2.suspended == true);
 
-  // Advance time to satisfy latency
   for (int i = 0; i < 1000; ++i)
     cu.tick();
 
   stage.execute();
 
-  assert(output.updated == true);  // When resuming from memory, output_latch signals warp resume
+  assert(output.updated == true);
   assert(output.warp == &warp2);
   assert(warp2.suspended == false);
 

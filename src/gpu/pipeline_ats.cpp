@@ -13,7 +13,7 @@ bool ActiveThreadSelection::is_active() {
 }
 
 void ActiveThreadSelection::execute() {
-  // 2nd substage: Output buffered results (matching SIMTight's 2nd substage)
+  // 2nd substage: Output buffered results 
   if (stage_buffer.valid) {
     if (PipelineStage::output_latch->updated) return;
     PipelineStage::output_latch->updated = true;
@@ -23,18 +23,13 @@ void ActiveThreadSelection::execute() {
     log("Active Thread Selection",
         name + " has " +
             std::to_string(stage_buffer.active_threads.size()) + " active threads (substage 2)");
-    stage_buffer.valid = false;  // Clear buffer
+    stage_buffer.valid = false;  // Clear buffer; don't forget lol
   } else if (!PipelineStage::output_latch->updated) {
     PipelineStage::output_latch->updated = false;
     PipelineStage::output_latch->warp = nullptr;
   }
 
-  // 1st substage: Compute active threads (matching SIMTight's 1st substage)
-  // Matching SIMTight: Active threads are those with the max nesting level
-  // On a tie, favour instructions undergoing a retry
-  // Tie-breaking: SIMTight's pipelinedTree1 uses maxOf where (a > b) then a else b, so on
-  // equality the *second* wins; the tree thus picks the highest lane index when all tie.
-  // We match by using (value >= leader_value) so we keep the *last* (highest index) with max.
+  // 1st substage: Compute active threads
   if (!PipelineStage::input_latch->updated) {
     return;
   }
@@ -63,7 +58,7 @@ void ActiveThreadSelection::execute() {
     return;
   }
   
-  // Leader's state (matching SIMTight's state2)
+  // Leader staet
   uint64_t leader_pc = warp->pc[leader_idx];
   uint64_t leader_nesting = warp->nesting_level[leader_idx];
   bool leader_retry = warp->retrying[leader_idx];
@@ -80,7 +75,7 @@ void ActiveThreadSelection::execute() {
     }
   }
   
-  // Store results in buffer for next cycle (2nd substage)
+  // the buffered data gets passed to nxet stage (2nd substage)
   PipelineStage::input_latch->updated = false;
   stage_buffer.warp = warp;
   stage_buffer.active_threads = active_threads;

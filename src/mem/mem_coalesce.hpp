@@ -18,8 +18,8 @@ struct MemRequest {
   bool is_atomic;
   bool is_fence;
   bool is_zero_extend;
-  std::vector<int> store_values;  // Only used for stores
-  std::vector<int> atomic_add_values;  // Only used for atomic add operations
+  std::vector<int> store_values;
+  std::vector<int> atomic_add_values;
   unsigned int rd_reg;
   std::vector<size_t> active_threads;
 };
@@ -117,26 +117,18 @@ public:
   bool is_sram_access(const MemRequest &req) const;
 
   int calculate_sram_bank_conflicts(const MemRequest &req) const;
-
   void suspend_warp(Warp *warp, const std::vector<uint64_t> &addrs,
                     size_t access_size, bool is_store);
   int calculate_bursts(const std::vector<uint64_t> &addrs, size_t access_size,
                        bool is_store);
   int calculate_request_count(const std::vector<uint64_t> &addrs, size_t access_size);
-  
-  // Compute coalesced addresses (one per coalesced group) for DRAM requests
   std::vector<uint64_t> compute_coalesced_addresses(const std::vector<uint64_t> &addrs,
                                                       size_t access_size);
   
   // Translate virtual stack address to physical per-thread stack address
-  // Uses contiguous per-thread layout for actual data operations
   uint64_t translate_stack_address(uint64_t virtual_addr, Warp *warp, size_t thread_id);
-
-  // SIMTight-matching interleaved address for coalescing/DRAM counting only
   uint64_t interleave_addr_simtight(uint64_t virtual_addr, Warp *warp, size_t thread_id);
 
-  // Build a NUM_LANES-sized vector of translated physical addresses indexed by lane_id.
-  // Inactive lanes get an SRAM sentinel address (filtered out by calculate_bursts).
   std::vector<uint64_t> build_translated_lane_addrs(
       Warp *warp, const std::vector<uint64_t> &addrs,
       const std::vector<size_t> &active_threads);

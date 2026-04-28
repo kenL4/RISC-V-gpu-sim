@@ -10,9 +10,7 @@ void OperandLatch::execute() {
 
     Warp *warp = PipelineStage::input_latch->warp;
     
-    // Latch operands (with register file load latency accounted for)
-    // With default loadLatency=1, this is a pass-through stage that provides
-    // the pipeline boundary matching SIMTight's Stage 4 (Operand Latch)
+    // Just a pass through stage in the SIMTight GPU
     
     PipelineStage::input_latch->updated = false;
     PipelineStage::output_latch->updated = true;

@@ -1,7 +1,7 @@
 #pragma once
 #include "../utils.hpp"
 
-// Based on the work of michaeljclark, five ways to invoke the LLVM disassembler
+// Based on the work of michaeljclark, 'five ways to invoke the LLVM disassembler'
 // https://gist.github.com/michaeljclark/d94b72fa3d580ea2037e0a4dc5e2fc5b#file-llvmdiscpp-cpp-L15
 
 using namespace llvm;

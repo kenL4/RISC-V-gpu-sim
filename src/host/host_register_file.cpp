@@ -25,7 +25,6 @@ static int get_register_idx(llvm::MCRegister reg) {
 int HostRegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cpu) {
   if (registers.size() <= 0) {
       registers.resize(num_registers);
-      // Clear values
       for (int i = 0; i < num_registers; i++) {
           registers[i] = 0;
       }
@@ -43,7 +42,6 @@ void HostRegisterFile::set_register(uint64_t warp_id, int thread, int reg,
                                     int value, bool is_cpu) {
   if (registers.size() <= 0) {
       registers.resize(num_registers);
-      // Clear values
       for (int i = 0; i < num_registers; i++) {
           registers[i] = 0;
       }
@@ -67,27 +65,5 @@ void HostRegisterFile::set_csr(uint64_t warp_id, int thread, int csr, int value)
   rf->set_csr(warp_id, thread, csr, value);
 }
 void HostRegisterFile::pretty_print(uint64_t warp_id) {
-  if(!Config::instance().isCPUDebug()) {
-    return;
-  }
-  
-  if (warp_id_to_registers.count(warp_id) == 0) {
-    std::cout << "No registers for host" << std::endl;
-    return;
-  }
-
-  // Print header: Thread IDs
-  std::cout << std::setw(4) << "Host";
-  std::cout << "\n";
-
-  // Print separator
-  std::cout << "----";
-  std::cout << "\n";
-
-  // Print each register
-  for (size_t reg_idx = 0; reg_idx < registers.size(); ++reg_idx) {
-    std::cout << std::setw(4) << ("x" + std::to_string(reg_idx));
-    std::cout << std::setw(4) << registers[reg_idx];
-    std::cout << "\n";
-  }
+  // also removed like the register file version
 }

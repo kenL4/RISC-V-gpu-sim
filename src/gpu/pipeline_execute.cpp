@@ -8,6 +8,7 @@
 #include <iomanip>
 
 // In RISC-V, Word is always 32-bit (4 bytes)
+// I prolly shouldn't be puting this here but I might clean up if I have time
 #define WORD_SIZE 4
 
 ExecutionUnit::ExecutionUnit(CoalescingUnit *cu, RegisterFile *rf,
@@ -88,9 +89,6 @@ execute_result ExecutionUnit::execute(Warp *warp,
     res.write_required = auipc(warp, active_threads, &inst);
   } else if (mnemonic == "LW") {
     res.write_required = lw(warp, active_threads, &inst);
-    // If memory operation returns false AND warp is not suspended, queue was full - need to retry
-    // If memory operation returns false AND warp is suspended, operation succeeded (writeback/resume happens later)
-    // Matching SIMTight: retry when queue full (warp not suspended), suspend when operation accepted
     if (!res.write_required && !warp->suspended) {
       res.success = false;
       res.counted = false;
@@ -526,9 +524,8 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: addresses are zero-extended from 32-bit register values
-    // rs1 is stored as int (32-bit signed), but addresses are unsigned - zero-extend to 64-bit
-    uint64_t rs1_64 = static_cast<uint32_t>(rs1);  // Zero-extend from 32-bit
+    // sign extension magic istg
+    uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
     valid_threads.push_back(thread);
@@ -539,7 +536,6 @@ bool ExecutionUnit::lw(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 
@@ -559,7 +555,7 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    // again more sign extension magic
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -571,7 +567,6 @@ bool ExecutionUnit::lh(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 
@@ -591,7 +586,7 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
+    // ive repeated this comment enough
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -603,7 +598,6 @@ bool ExecutionUnit::lhu(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 
@@ -623,7 +617,6 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -635,7 +628,6 @@ bool ExecutionUnit::lb(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 
@@ -655,7 +647,6 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
 
   for (auto thread : active_threads) {
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -667,7 +658,6 @@ bool ExecutionUnit::lbu(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 
@@ -689,7 +679,6 @@ bool ExecutionUnit::sw(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -722,7 +711,6 @@ bool ExecutionUnit::sh(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -755,7 +743,6 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, base, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(disp));
     addresses.push_back(addr);
@@ -772,7 +759,8 @@ bool ExecutionUnit::sb(Warp *warp, std::vector<size_t> active_threads,
 
 bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
                               MCInst *in) {
-  // I do AMOADD_W via a memory request for atomicity
+  // my previous comment seemed to think that amoadd doesn't happen on memory
+  // clearly i was somewhat confused
   assert(in->getNumOperands() >= 3);
 
   if (!cu->can_put()) {
@@ -793,7 +781,6 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
   for (auto thread : active_threads) {
     int rs2 = rf->get_register(warp->warp_id, thread, rs2_reg, warp->is_cpu);
     int rs1 = rf->get_register(warp->warp_id, thread, rs1_reg, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t addr = rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(offset));
     addresses.push_back(addr);
@@ -806,7 +793,6 @@ bool ExecutionUnit::amoadd_w(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Results written on resume
   return false;
 }
 bool ExecutionUnit::jal(Warp *warp, std::vector<size_t> active_threads,
@@ -833,8 +819,6 @@ bool ExecutionUnit::jalr(Warp *warp, std::vector<size_t> active_threads,
     int64_t imm = in->getOperand(2).getImm();
 
     rf->set_register(warp->warp_id, thread, rd, warp->pc[thread] + 4, warp->is_cpu);
-    // RISC-V 64-bit: zero-extend 32-bit register value to 64-bit address
-    // JALR: target address is (rs1 + imm) with LSB cleared (& ~1)
     uint64_t rs1_64 = static_cast<uint32_t>(rs1);
     uint64_t target = (rs1_64 + static_cast<uint64_t>(static_cast<int64_t>(imm))) & ~1ULL;
     if (target == 0) {
@@ -1193,8 +1177,7 @@ bool ExecutionUnit::rem_(Warp *warp, std::vector<size_t> active_threads,
 
 bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
                           MCInst *in) {
-  // Matching SIMTight: check canPut before accepting memory fence request
-  // If queue is full, return false to trigger retry (PC should NOT advance)
+  // check canPut before accepting memory fence request
   if (!cu->can_put()) {
     return false;
   }
@@ -1204,7 +1187,7 @@ bool ExecutionUnit::fence(Warp *warp, std::vector<size_t> active_threads,
     warp->pc[thread] += 4;
   }
 
-  // Fence completes on resume
+  // Fence should "complete" when we resume
   return false;
 }
 
@@ -1242,19 +1225,15 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     bool handled = true;
     switch (csr) {
     case 0x800: {
-      // I'm not convinced any of the NoCL kernels actually use this
       if (!Config::instance().isStatsOnly()) {
         std::cout << "[SimEmit] 0x" << std::hex << rs1_val << std::dec << std::endl;
       }
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x801: {
-      // I'm not convinced any of the NoCL kernels actually use this
       if (!Config::instance().isStatsOnly()) {
         std::cout << "[SimFinish] Terminating simulator" << std::endl;
       }
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x802:
@@ -1262,11 +1241,9 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       rf->set_register(warp->warp_id, thread, rd_reg, 1, warp->is_cpu);
       break;
     case 0x803: {
-      // UART Put: Write byte to UART
-      // Buffer the output for both CPU and GPU
+      // for printing
       char byte_val = static_cast<char>(rs1_val);
       gpu_controller->buffer_data(byte_val);
-      // Write-only CSR, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x804:
@@ -1299,47 +1276,37 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x806: {
       // InstrAddr: Write-only CSR, sets instruction mem address (for CPU)
-      // My simulator handles this step at initialisation
-
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x807: {
       // WriteInstr: Write-only CSR, writes to instruction mem (for CPU)
       // I don't know when this would ever be necessary
-
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x820: {
       // SIMTCanPut: Read-only CSR, returns 1 if can put (queue not full), 0 if can't put
       // If the GPU is inactive, then the CPU can issue a new SIMT request
       bool active = gpu_controller->is_gpu_active();
-      int can_put = active ? 0 : 1;  // Can put if GPU is not active
+      int can_put = active ? 0 : 1;
       rf->set_register(warp->warp_id, thread, rd_reg, can_put, warp->is_cpu);
     } break;
     case 0x821: {
       // SIMTInstrAddr: Write-only CSR, sets instruction mem address (for SIMT)
       // My simulator handles this step in the launch_kernel function
-
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x822: {
       // SIMTWriteInstr: Write-only CSR, writes to instruction mem (for SIMT)
       // I don't think this happens in my sim setup
-
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x823: {
-      // Write-only CSR: writing PC starts kernel (if rs1_val != 0)
+      // launch kernel is the big one
       if (rs1_val != 0) {
         gpu_controller->set_pc(rs1_val);
         gpu_controller->launch_kernel();
       }
 
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x824: {
@@ -1352,22 +1319,16 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       unsigned val = gpu_controller->get_stat_value();
       int reg_val = static_cast<int>(val);
       rf->set_register(warp->warp_id, thread, rd_reg, reg_val, warp->is_cpu);
-      // Writes to CSR 0x825 are ignored (read-only)
     } break;
     case 0x826: {
-      // RISC-V 64-bit: addresses are 32-bit, zero-extended to 64-bit (not sign-extended)
-      // rs1_val contains a 32-bit address value, we need to zero-extend it
       uint64_t arg_addr = static_cast<uint32_t>(rs1_val);
       gpu_controller->set_arg_ptr(arg_addr);
       break;
     }
     case 0x827: {
       // SIMTSetWarpsPerBlock: Write-only CSR, sets number of warps per block
-      // (A block is a group of threads that synchronise on a barrier)
-      // (A value of 0 indicates all warps form one block)
       unsigned warps_per_block = static_cast<unsigned>(rs1_val);
       gpu_controller->set_warps_per_block(warps_per_block);
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x828: {
@@ -1398,7 +1359,6 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       
       unsigned stat_val = static_cast<unsigned>(val & 0xFFFFFFFFU);
       gpu_controller->set_stat_value(stat_val);
-      // Write-only, so reads return undefined (we return 0)
       rf->set_register(warp->warp_id, thread, rd_reg, 0, warp->is_cpu);
     } break;
     case 0x830: {
@@ -1413,17 +1373,11 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
       if (should_write_csr) {
         rf->set_csr(warp->warp_id, thread, 0x830, rs1_val);
         
-        // Handle barrier command (rs1_val == 0)
         if (rs1_val == 0) {
-          // Barrier: mark warp as in barrier (matching SIMTight: barrierBits!warpId5 <== true)
           if (warp->suspended) {
-            // Warp is suspended, cannot enter barrier - this should not happen if scheduler works correctly
             return false;
           }
-          
-          // SIMTight asserts that warp must be converged before entering barrier:
-          // dynamicAssert (inv excGlobal.val .==>. activeMask5 .==. ones)
-          //   "SIMT pipeline: warp command issued by diverged warp"
+
           bool all_converged = true;
           uint64_t leader_pc = 0;
           uint64_t leader_nesting = 0;
@@ -1445,7 +1399,6 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
           }
           
           warp->in_barrier = true;
-          // The scheduler will skip warps in barrier, and barrier release will clear the flag
         } else {
           for (size_t t = 0; t < warp->size; t++) {
             warp->finished[t] = true;
@@ -1455,20 +1408,17 @@ bool ExecutionUnit::csrrw(Warp *warp, std::vector<size_t> active_threads,
     } break;
     case 0x831: {
       uint64_t args = gpu_controller->get_arg_ptr();
-      // CSR 0x831 returns 32-bit address (as per SIMTight)
       uint32_t args_u32 = static_cast<uint32_t>(args);
       int args_32 = static_cast<int>(args_u32);
       rf->set_register(warp->warp_id, thread, rd_reg, args_32, warp->is_cpu);
     } break;
     case 0xc00: {
       // Cycle: Read-only CSR, cycle count (lower 32 bits)
-      // In SIMTight: csrRead = Just do return (lower count.val)
       uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
       rf->set_register(warp->warp_id, thread, rd_reg, cycles & 0xFFFFFFFF, warp->is_cpu);
     } break;
     case 0xc80: {
       // CycleH: Read-only CSR, cycle count (upper 32 bits)
-      // In SIMTight: csrRead = Just do return (upper count.val)
       uint64_t cycles = GPUStatisticsManager::instance().get_gpu_cycles();
       rf->set_register(warp->warp_id, thread, rd_reg, (cycles >> 32) & 0xFFFFFFFF, warp->is_cpu);
     } break;
@@ -1543,7 +1493,7 @@ void ExecuteSuspend::execute() {
   std::vector<size_t> active_threads =
       PipelineStage::input_latch->active_threads;
 
-  // Matching SIMTight: count suspension bubble when a suspended warp enters execute stage
+  // suspension bubble when a suspended warp reaches the execute stage
   if (warp->suspended && !warp->is_cpu) {
     GPUStatisticsManager::instance().increment_gpu_susps();
   }

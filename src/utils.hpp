@@ -29,7 +29,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
 #define GET_REGINFO_ENUM
-#include "gen/llvm_riscv_registers.h"
+#include "gen/gen_llvm_riscv_registers.h"
 
 #include "config.hpp"
 #include "parser.hpp"

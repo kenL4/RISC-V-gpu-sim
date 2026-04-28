@@ -5,7 +5,6 @@
 
 /*
  * An individual warp. This maintains the per-warp state
- * Matching SIMTight's SIMTThreadState structure
  */
 class Warp {
 public:
@@ -14,9 +13,9 @@ public:
   std::vector<uint64_t> pc;
   std::vector<uint64_t> nesting_level;
   std::vector<bool> finished;
-  std::vector<bool> retrying;  // Matching SIMTight's simtRetry: per-thread retry flag
+  std::vector<bool> retrying;
   bool suspended;
-  bool in_barrier;  // Matching SIMTight's barrierBits: warp is in barrier state
+  bool in_barrier;
   Warp(uint64_t warp_id, size_t size, uint64_t start_pc, bool is_cpu)
       : warp_id(warp_id), size(size), is_cpu(is_cpu), suspended(false),
         in_barrier(false),
@@ -99,7 +98,7 @@ public:
   std::shared_ptr<PipelineStage> get_stage(int index);
 
   /*
-   * Set pipeline active state (matching SIMTight's pipelineActive)
+   * Set pipeline active state
    * Pipeline stays active from kernel launch until all warps terminate
    */
   void set_pipeline_active(bool active) {
@@ -133,7 +132,7 @@ public:
 
 private:
   std::vector<std::shared_ptr<PipelineStage>> stages;
-  bool pipeline_active = false;  // Matching SIMTight's pipelineActive
+  bool pipeline_active = false;
   size_t completed_warps = 0;
   bool pipeline_deactivating = false;
 };

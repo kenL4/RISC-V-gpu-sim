@@ -11,7 +11,7 @@ WarpScheduler::WarpScheduler(int warp_size, int warp_count, uint64_t start_pc,
   log("Warp Scheduler", "Initializing warp scheduling pipeline stage");
   if (start_active) {
     for (int i = 0; i < warp_count; i++) {
-      // Only CPU is "start_active" so we can assume warp is true
+      // Only CPU should have "start_active" so we can assume warp is_cpu is true
       Warp *warp = new Warp(i, warp_size, start_pc, true);
       warp_queue.push(warp);
       all_warps[i] = warp;
@@ -38,10 +38,10 @@ std::pair<uint64_t, uint64_t> WarpScheduler::fair_scheduler(uint64_t hist, uint6
   uint64_t first = firstHot(avail & ~hist);
   
   if (first != 0) {
-    // Found an available warp not in history: add to history and choose it
+    // Found an available warp not in history. add to history and choose it
     return std::make_pair(hist | first, first);
   } else {
-    // All available warps are in history: choose any available and reset history
+    // All available warps are in history. choose first available and reset history
     uint64_t second = firstHot(avail);
     return std::make_pair(second, second);
   }
@@ -61,9 +61,8 @@ uint64_t WarpScheduler::random_scheduler(uint64_t avail) {
 void WarpScheduler::execute() {
   warp_issued_this_cycle = false;
 
-  // 2nd substage: Output the chosen warp from buffer (matching SIMTight's 2nd substage)
+  // 2nd substage: Output the chosen warp from buffer
   if (chosen_warp_buffer != nullptr && !PipelineStage::output_latch->updated) {
-    // Output the warp that was chosen in the previous cycle
     PipelineStage::output_latch->updated = true;
     PipelineStage::output_latch->warp = chosen_warp_buffer;
     warp_issued_this_cycle = true;
@@ -78,7 +77,7 @@ void WarpScheduler::execute() {
     PipelineStage::output_latch->warp = nullptr;
   }
 
-  // 1st substage: Choose a warp for next cycle (matching SIMTight's 1st substage)
+  // 1st substage: Choose a warp for next cycle 
   flush_new_warps();
 
   while (!retry_extra_ready.empty()) {
@@ -199,17 +198,16 @@ void WarpScheduler::barrier_release_unit() {
     barrier_mask = (1ULL << warps_per_block) - 1;
   }
   
-  // Barrier release state machine (matching SIMTight's state machine)
+  // Barrier release state machine
   if (barrier_release_state == 0) {
-    // State 0: Wait for a barrier
+    // State 0
     if (barrier_bits != 0) {
       barrier_shift_reg = barrier_bits;
       release_warp_id = 0;
       barrier_release_state = 1;
     }
-    // If barrier_bits == 0, stay in state 0 (no warps in barrier
   } else if (barrier_release_state == 1) {
-    // State 1: Check on current barrier status
+    // State 1
     bool all_in_barrier = ((barrier_shift_reg & barrier_mask) == barrier_mask);
     release_success = all_in_barrier;
     release_warp_count = 1;
@@ -220,40 +218,37 @@ void WarpScheduler::barrier_release_unit() {
       barrier_release_state = 2;
     }
   } else if (barrier_release_state == 2) {
-    // State 2: Shift and release
+    // State 2
     unsigned warps_per_block_check = (warps_per_block == 0) ? 64 : warps_per_block;
     unsigned block_start_warp = (warps_per_block == 0) ? 0 : ((release_warp_id / warps_per_block_check) * warps_per_block_check);
     unsigned block_end_warp = block_start_warp + warps_per_block_check - 1;
     
     if (release_success) {
-      // Release all warps in the block at once for simplicity
+      // this is kinda different to simtight cos we release all warps at once rather than sequentially
+      // i need to do some thinking on how this would affect latency but i don't think it should
       for (unsigned warp_id = block_start_warp; warp_id <= block_end_warp && warp_id < 64; warp_id++) {
         auto it = all_warps.find(warp_id);
         if (it != all_warps.end()) {
           Warp *w = it->second;
           if (w->in_barrier && !w->is_cpu) {
             w->in_barrier = false;
-            // Update barrier_bits to reflect the release
             barrier_bits &= ~(1ULL << warp_id);
           }
         }
       }
       
-      // Shift barrier_shift_reg by warps_per_block to skip all warps in the block
       for (unsigned i = 0; i < warps_per_block_check && release_warp_id < 64; i++) {
         barrier_shift_reg = barrier_shift_reg >> 1;
         release_warp_id++;
         release_warp_count++;
       }
     } else {
-      // If release_success is false, process warps
-      // This handles the case where not all warps are ready yet
       if (release_warp_id < 64) {
         auto it = all_warps.find(release_warp_id);
         if (it != all_warps.end()) {
           Warp *w = it->second;
           if (w->in_barrier && !w->is_cpu) {
-            // Don't release - not all warps are ready
+            // do nothing
           }
         }
       }
@@ -273,10 +268,8 @@ void WarpScheduler::barrier_release_unit() {
         }
       }
     } else {
-      // Process warps_per_block warps before going back to state 1
       if (release_warp_count > warps_per_block || release_warp_id >= 64) {
         barrier_release_state = 1;
-        // If we've processed all warps, go back to state 0
         if (release_warp_id >= 64) {
           barrier_release_state = 0;
         }

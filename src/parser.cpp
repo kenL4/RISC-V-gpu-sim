@@ -6,7 +6,7 @@ parse_error parse_binary(std::string file, LLVMDisassembler &disasm, parse_outpu
         return PARSE_LOAD_ERROR;
     }
 
-    // Load .text section (code)
+    // Load .text section (code), could probably have just done this in that one pass tbh
     const ELFIO::section* text_section = reader.sections[".text"];
     if (text_section == nullptr) {
         return PARSE_LOAD_ERROR;
@@ -23,7 +23,7 @@ parse_error parse_binary(std::string file, LLVMDisassembler &disasm, parse_outpu
     out->base_addr = text_section->get_address();
     out->max_addr = text_section->get_size() + out->base_addr;
 
-    // Load data sections (.rodata, .data, .sdata, etc.)
+    // Load all the data sections (.rodata, .data, .sdata, etc.)
     out->data_sections.clear();
     ELFIO::Elf_Half sec_num = reader.sections.size();
     for (ELFIO::Elf_Half i = 0; i < sec_num; ++i) {

@@ -1,6 +1,6 @@
 #include "mem_data.hpp"
 
-// Helper functions for sign/zero extension (used by both DataMemory and CoalescingUnit)
+// Helper functions for sign/zero extension
 int64_t sign_extend(uint64_t val, size_t bytes) {
   switch (bytes) {
   case 1:

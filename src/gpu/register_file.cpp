@@ -15,27 +15,23 @@ void RegisterFile::ensure_warp_initialized(uint64_t warp_id) {
     if (warp_id_to_registers.find(warp_id) == warp_id_to_registers.end()) {
         warp_id_to_registers[warp_id].resize(registers_per_warp);
         for (auto &reg_vec : warp_id_to_registers[warp_id]) {
-            reg_vec.resize(thread_count, 0);  // resize with 0 already initializes
+            reg_vec.resize(thread_count, 0);
         }
     }
 }
 
 int RegisterFile::get_register(uint64_t warp_id, int thread, int reg, bool is_cpu) {
-    // If CPU tries to access, return 0 (shouldn't happen, but handle gracefully)
     if (is_cpu) return 0;
 
-    // RISC-V x0 (zero register) always returns 0, regardless of what's stored
     if (reg == llvm::RISCV::X0) return 0;
     ensure_warp_initialized(warp_id);
     return warp_id_to_registers[warp_id][get_register_idx(reg)][thread];
 }
 
 void RegisterFile::set_register(uint64_t warp_id, int thread, int reg, int value, bool is_cpu) {
-    // If CPU tries to access, ignore it (shouldn't happen, but handle gracefully)
     if (is_cpu) return;
     ensure_warp_initialized(warp_id);
 
-    // Don't write to X0 (zero register) - it's always 0
     if (reg == llvm::RISCV::X0) return;
 
     int reg_idx = get_register_idx(reg);
@@ -75,32 +71,6 @@ RegisterFile::~RegisterFile() {
  * TODO: Make this look good
  */
 void RegisterFile::pretty_print(uint64_t warp_id) {
-    if (warp_id_to_registers.find(warp_id) == warp_id_to_registers.end()) {
-        std::cout << "No registers for warp " << warp_id << "\n";
-        return;
-    }
-
-    const auto &regs = warp_id_to_registers[warp_id];
-    size_t thread_count = regs.empty() ? 0 : regs[0].size();
-
-    // Print header: Thread IDs
-    std::cout << std::setw(4) << "Thrd";
-    for (size_t t = 0; t < thread_count; ++t) {
-        std::cout << std::setw(4) << t;
-    }
-    std::cout << "\n";
-
-    // Print separator
-    std::cout << "----";
-    for (size_t t = 0; t < thread_count; ++t) std::cout << "----";
-    std::cout << "\n";
-
-    // Print each register
-    for (size_t reg_idx = 0; reg_idx < regs.size(); ++reg_idx) {
-        std::cout << std::setw(4) << ("x" + std::to_string(reg_idx));
-        for (size_t t = 0; t < thread_count; ++t) {
-            std::cout << std::setw(4) << regs[reg_idx][t];
-        }
-        std::cout << "\n";
-    }
+    // DO NOTHING (removed because honestly it looked awful
+    // and was not super helpful for debugging)
 }

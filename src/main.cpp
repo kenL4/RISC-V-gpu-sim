@@ -32,12 +32,12 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
     p->add_stage<WarpScheduler>(NUM_LANES, NUM_WARPS, im->get_base_addr(), cu, false);
   }
   p->add_stage<ActiveThreadSelection>();
-  p->add_stage<InstructionFetch>(im, disasm);                // Stage 2
-  p->add_stage<OperandFetch>();                              // Stage 3
-  p->add_stage<OperandLatch>();                              // Stage 4
+  p->add_stage<InstructionFetch>(im, disasm);
+  p->add_stage<OperandFetch>();
+  p->add_stage<OperandLatch>();
   p->add_stage<ExecuteSuspend>(cu, rf, im->get_max_addr(), disasm,
-                               gpu_controller);              // Stage 5
-  p->add_stage<WritebackResume>(cu, rf, is_cpu);            // Stage 6
+                               gpu_controller);
+  p->add_stage<WritebackResume>(cu, rf, is_cpu);
 
   std::shared_ptr<WarpScheduler> warp_scheduler_stage =
       std::dynamic_pointer_cast<WarpScheduler>(p->get_stage(0));
@@ -66,7 +66,6 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
     };
   }
 
-  // Set up warp insertion for writeback stage
   writeback_stage->insert_warp = insert_warp_callback;
 
   writeback_stage->insert_warp_with_susp_delay = [ws = warp_scheduler_stage](Warp *warp) {
@@ -74,8 +73,6 @@ Pipeline *initialize_pipeline(InstructionMemory *im, CoalescingUnit *cu,
   };
 
   // Initialize latches (7 stages = 7 latches)
-  // Note: Latches must persist for the lifetime of the pipeline, so we use heap allocation
-  // The Pipeline should ideally own these, but for now we allocate them here
   PipelineLatch *latches[7];
   for (int i = 0; i < 7; i++) {
     latches[i] = new PipelineLatch();

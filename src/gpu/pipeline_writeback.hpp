@@ -25,6 +25,6 @@ public:
 private:
   CoalescingUnit *cu;
   RegisterFile *rf;
-  bool is_cpu_pipeline;  // True if this is the CPU pipeline, false if GPU
+  bool is_cpu_pipeline;  // True if this is the CPU pipeline, false if GPU (mindblown)
   Tracer *instr_tracer = nullptr;
 };
